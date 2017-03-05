@@ -16,15 +16,28 @@ require(lubridate)
 require(ggmap)
 require(stringr)
 require(maptools)
+require(DBI)
 
 # search string: what will you search twitter for?
 search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017)) OR #corn17 OR #corn2017 OR #soy17 OR #soy2017 OR #wheat17 OR #wheat2017"
 
+# output directory: save to Dropbox, not git repository, so it's automatically backed up
+out.dir <- "C:/Users/Sam/Dropbox/Work/AgroStream/"
+
 # path to save output CSV
-path.out <- paste0(git.dir, "TweetsOut.csv")
+path.out <- paste0(out.dir, "TweetsOut.sqlite")
 
 # path to save the last tweet ID
-path.lastID <- paste0(git.dir, "TweetsOut_LastID.txt")
+path.lastID <- paste0(out.dir, "TweetsOut_LastID.txt")
+
+# path to save the screen output
+path.sink <- paste0(out.dir, "TweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
+
+## launch sink file, which will store screen output 
+# this is useful when automating, so it can be double-checked later
+# to make sure nothing weird happened
+s <- file(path.sink, open="wt")
+sink(s, type="message")
 
 # path to a CSV file with a list of all countries 
 # (downloaded from: http://blog.plsoucy.com/2012/04/iso-3166-country-code-list-csv-sql/ )
@@ -136,12 +149,12 @@ check.status <- sapply(geo.out, function(x) x["status"]=="OK" & length(x["status
 # status check: is location ambiguous?
 check.ambig <- sapply(lapply(geo.out, lapply, length), function(x) x["results"]=="1")
 
-# status check: is location resolved to subcounty level?
-# acceptable subcounty codes, from https://developers.google.com/maps/documentation/geocoding/intro
-add.comp.subcounty <- c("locality", "postal_code", "neighborhood", "park", "sublocality", "locality",
-                        paste0("administrative_area_level_", seq(2,5)))
+# status check: is location resolved to state level?
+# acceptable google address component codes, from https://developers.google.com/maps/documentation/geocoding/intro
+add.comp.state <- c("locality", "postal_code", "neighborhood", "park", "sublocality", "locality",
+                        paste0("administrative_area_level_", seq(1,5)))
 
-subcounty <- function(i.location, geocodes=geo.out){
+state.resolved <- function(i.location, geocodes=geo.out){
   # custom function to determine if any subcounty address component exists
   #   input, i.location, is the index of a point in the geo.out list
   #   output will be a logical (T/F)
@@ -153,10 +166,10 @@ subcounty <- function(i.location, geocodes=geo.out){
     n.add.comp <- length(geocodes[[i.location]]["results"]$results[[1]]$address_components)
     
     # extract address component types for this location
-    add.comp.types <- c(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
+    add.comp.types <- unlist(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
     
     # see if any address component types are at subcounty level
-    return(sum(add.comp.types %in% add.comp.subcounty)>0)
+    return(sum(add.comp.types %in% add.comp.state)>0)
     
   } else {
     # if no results found, output is false
@@ -166,10 +179,10 @@ subcounty <- function(i.location, geocodes=geo.out){
   }
 }
 
-check.subcounty <- unlist(lapply(1:length(locations), FUN=subcounty))   # apply subcounty function
+check.state <- unlist(lapply(1:length(locations), FUN=state.resolved))   # apply state check function
 
 # combine all checks into a single logical
-check.all <- check.status & check.ambig & check.subcounty
+check.all <- check.status & check.ambig & check.state
 
 # trim geo.out
 geo.out <- geo.out[check.all]
@@ -191,15 +204,50 @@ df.out <- merge(df, df.users, by="screenName", all.x=T)
 df.out <- df.out[(is.finite(df.out$latitude) & is.finite(df.out$longitude)) | 
                    (is.finite(df.out$lat.location) & is.finite(df.out$lon.location)), ]
 
-# save output
-if (file.exists(path.out)){
-  write.table(df.out, path.out, sep=",", row.names=F, col.names=F, append=T)
-} else {
-  write.table(df.out, path.out, sep=",", row.names=F)
-}
+# get rid of commas
+df.out$text <- gsub(",", " ", df.out$text)
+df.out$location <- gsub(",", " ", df.out$location)
+df.out$description <- gsub(",", " ", df.out$description)
+
+# get rid of line breaks
+df.out$text <- gsub("\n", " ", df.out$text)
+df.out$location <- gsub("\n", " ", df.out$location)
+df.out$description <- gsub("\n", " ", df.out$description)
+
+# get rid of URLs
+removeURL <- function(x) gsub("http[[:alnum:][:punct:]]*", "", x)
+df.out$text <- unlist(lapply(df.out$text, removeURL))
+
+# trim leading/trailing white space
+df.out$text <- trimws(df.out$text)
+
+# get rid of duplicate tweets
+df.out <- df.out[!duplicated(df.out[c("screenName", "text")]), ]
+
+# put in order
+df.out <- df.out[order(df.out$id), ]
+
+## put into database
+# create/connect to database
+db <- dbConnect(RSQLite::SQLite(), path.out)
+
+# add data frame to database (if it doesn't exist, it will be created)
+dbWriteTable(db, "tweets", df.out, append=T)
+
+# if you want to read in a data frame from your db to check...
+#df.test <- dbReadTable(db, "tweets")
+
+# when you're done, disconnect from database (this is when the data will be written)
+dbDisconnect(db)
 
 # write a text file with the last ID found, which will be used for future runs
 write.table(data.frame(id=max(df.out$id)), path.lastID, row.names=F)
+
+# close sink
+close(s)
+sink()
+sink(type="message")
+close(s)
 
 # # make a plot
 # state_map <- map_data("state")
