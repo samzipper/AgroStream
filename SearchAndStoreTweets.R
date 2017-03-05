@@ -1,3 +1,9 @@
+## SearchAndStoreTweets_CornPlanting.R
+#' This script is intended to:
+#'  (1) search Twitter for a keyword or set of keywords
+#'  (2) download all matching Tweets
+#'  (3) extract the location of the tweeter via Google Maps
+#'  (4) save the output as a CSV file
 
 rm(list=ls())
 
@@ -9,6 +15,16 @@ require(twitteR)
 require(lubridate)
 require(ggmap)
 require(stringr)
+require(maptools)
+
+# search string: what will you search twitter for?
+search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017)) OR #corn17 OR #corn2017 OR #soy17 OR #soy2017 OR #wheat17 OR #wheat2017"
+
+# path to save output CSV
+path.out <- paste0(git.dir, "TweetsOut.csv")
+
+# path to save the last tweet ID
+path.lastID <- paste0(git.dir, "TweetsOut_LastID.txt")
 
 # path to a CSV file with a list of all countries 
 # (downloaded from: http://blog.plsoucy.com/2012/04/iso-3166-country-code-list-csv-sql/ )
@@ -18,7 +34,6 @@ path.countries <- paste0(git.dir, "AllCountries.csv")
 # so not shared publicly). these are obtained from twitter/google
 # when you create your app.
 path.auth.t <- paste0(git.dir, "TwitterAuth.txt")
-path.auth.g <- paste0(git.dir, "GoogleAuth.txt")
 
 # read in authentication info - file has three lines of 
 # comments followed by:
@@ -32,25 +47,40 @@ auth.t <- read.table(path.auth.t, skip=3, stringsAsFactors=F)[,1]    # read in a
 options(httr_oauth_cache=T)   # this will store authentication as a local file
 setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
 
-# get only tweets from yesterday
-date.today <- as.Date(Sys.time())      # today's date
-date.yesterday <- date.today-days(1)   # yesterday's date
+# check if lastID file exists
+if (file.exists(path.lastID)){
+  lastID <- read.csv(path.lastID)$id
+  
+  # search twitter!
+  tweets <- searchTwitter(search.str, 
+                          n=10000, 
+                          geocode='39.833333,-98.583333,1500mi',
+                          resultType="recent",
+                          sinceID=lastID,
+                          retryOnRateLimit=5000)
+  
+} else {
+  # search twitter using last week
+  date_today <- as.Date(Sys.time())
+  date_1week <- date_today - days(7)
+  
+  tweets <- searchTwitter(search.str, 
+                          n=10000, 
+                          geocode='39.833333,-98.583333,1500mi',
+                          resultType="recent",
+                          since=as.character(date_1week),
+                          retryOnRateLimit=5000)
+}
 
-# search twitter!
-tweets <- searchTwitter("#drought", n=10000, 
-                        geocode='39.833333,-98.583333,1500mi',
-                        resultType="recent",
-                        since=as.character(date.yesterday),
-                        until=as.character(date.today),
-                        retryOnRateLimit=500)
-
+# get rid of retweets
 tweets <- strip_retweets(tweets, strip_manual=T, strip_mt=T)
 
-# put into data frame
-df <- twListToDF(tweets)
+# put into data frame (only categories we care about)
+df <- twListToDF(tweets)[,c("text", "created", "id", "screenName", "isRetweet", "longitude", "latitude")]
 
-# trim to only categories we care about
-df <- df[,c("text", "created", "id", "screenName", "isRetweet", "longitude", "latitude")]
+# convert text to UTF-8 to deal with weird characters
+df$text <- sapply(df$text, function(row) iconv(row, to='UTF-8'))
+df$text <- gsub("\n", " ", df$text)
 
 ## using Google Maps API, get estimated geographic coordinates based on user location
 # limit of 2500/day! so, get clean location as much as possible first to minimize calls to API
@@ -78,7 +108,7 @@ countries <- c(df.countries$name,
                "Netherlands", "México", "Guam", 
                "Alberta", "Saskatchewan", "British Columbia", "Yukon Territories", "Ontario", "Quebec",
                "Nunavut", "Northwest Territories", "Yukon Territory", "Prince Edward Island", "Newfoundland",
-               "Alaska", "Hawaii")
+               "Alaska", "Hawaii", "Africa", "Asia", "Europe", "Australia")
 
 # eliminate for any location that includes a country name that's not the US
 df.users <- df.users[
@@ -86,14 +116,12 @@ df.users <- df.users[
                 FUN=function(x) sum(str_detect(tolower(x), tolower(countries))))
          )==0, ]
 
-## filter locations to eliminate any that are just a state name (exact matching)
-# load states dataset
-data("state")
-states <- c(state.abb, state.name, "United Nations", "Earth", "United States", 
-            "USA", "North America", "Europe", "Africa", "Australia", "Asia", "South America", "America")
+## filter locations to eliminate any that are just a large geographic region name (exact matching)
+big.geo <- c("United Nations", "Earth", "United States", "USA", "US", "America", 
+            "North America", "South America")
 
 # get rid of locations that are just a state name
-df.users <- df.users[!(df.users$location %in% states), ]
+df.users <- df.users[!(df.users$location %in% big.geo), ]
 
 # get unique locations
 locations <- unique(df.users$location)
@@ -118,14 +146,24 @@ subcounty <- function(i.location, geocodes=geo.out){
   #   input, i.location, is the index of a point in the geo.out list
   #   output will be a logical (T/F)
   
-  # figure out number of address components returned for this location
-  n.add.comp <- length(geocodes[[i.location]]["results"]$results[[1]]$address_components)
-  
-  # extract address component types for this location
-  add.comp.types <- c(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
-  
-  # see if any address component types are at subcounty level
-  return(sum(add.comp.types %in% add.comp.subcounty)>0)
+  # check if it found any results
+  if (length(geocodes[[i.location]]$results)>0){
+    
+    # figure out number of address components returned for this location
+    n.add.comp <- length(geocodes[[i.location]]["results"]$results[[1]]$address_components)
+    
+    # extract address component types for this location
+    add.comp.types <- c(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
+    
+    # see if any address component types are at subcounty level
+    return(sum(add.comp.types %in% add.comp.subcounty)>0)
+    
+  } else {
+    # if no results found, output is false
+    
+    return(FALSE)
+    
+  }
 }
 
 check.subcounty <- unlist(lapply(1:length(locations), FUN=subcounty))   # apply subcounty function
@@ -133,11 +171,14 @@ check.subcounty <- unlist(lapply(1:length(locations), FUN=subcounty))   # apply 
 # combine all checks into a single logical
 check.all <- check.status & check.ambig & check.subcounty
 
+# trim geo.out
+geo.out <- geo.out[check.all]
+
 ## make final locations data frame
 df.locations <- data.frame(
   location = locations[check.all],
-  lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat)[check.all],
-  lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)[check.all]
+  lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
+  lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
 )
 
 # add location info back to user data frame
@@ -149,3 +190,23 @@ df.out <- merge(df, df.users, by="screenName", all.x=T)
 # trim output data frame to only those with locations (either geotagged or from google)
 df.out <- df.out[(is.finite(df.out$latitude) & is.finite(df.out$longitude)) | 
                    (is.finite(df.out$lat.location) & is.finite(df.out$lon.location)), ]
+
+# save output
+if (file.exists(path.out)){
+  write.table(df.out, path.out, sep=",", row.names=F, col.names=F, append=T)
+} else {
+  write.table(df.out, path.out, sep=",", row.names=F)
+}
+
+# write a text file with the last ID found, which will be used for future runs
+write.table(data.frame(id=max(df.out$id)), path.lastID, row.names=F)
+
+# # make a plot
+# state_map <- map_data("state")
+# p.map <-
+#   ggplot(data=df.out, aes(x=lon.location, y=lat.location)) +
+#   geom_path(data=state_map, color="blue", aes(x=long, y=lat, group=factor(region))) +
+#   geom_point(shape=21) +
+#   coord_map() +
+#   theme_bw() +
+#   theme(panel.grid=element_blank())
