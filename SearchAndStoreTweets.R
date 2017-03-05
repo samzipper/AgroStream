@@ -22,6 +22,7 @@ require(DBI)
 search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017)) OR #corn17 OR #corn2017 OR #soy17 OR #soy2017 OR #wheat17 OR #wheat2017"
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
+# this is also where authentication info is stored
 out.dir <- "C:/Users/Sam/Dropbox/Work/AgroStream/"
 
 # path to save output CSV
@@ -46,7 +47,7 @@ path.countries <- paste0(git.dir, "AllCountries.csv")
 # relative path to authentication info (this is in .gitignore
 # so not shared publicly). these are obtained from twitter/google
 # when you create your app.
-path.auth.t <- paste0(git.dir, "TwitterAuth.txt")
+path.auth.t <- paste0(out.dir, "TwitterAuth.txt")
 
 # read in authentication info - file has three lines of 
 # comments followed by:
