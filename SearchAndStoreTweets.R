@@ -17,19 +17,18 @@ require(ggmap)
 require(stringr)
 require(maptools)
 require(DBI)
+require(ROAuth)
 
 # search string: what will you search twitter for?
 search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017)) OR #corn17 OR #corn2017 OR #soy17 OR #soy2017 OR #wheat17 OR #wheat2017"
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
-out.dir <- "C:/Users/Sam/Dropbox/Work/AgroStream/"
+#out.dir <- "C:/Users/Sam/Dropbox/Work/AgroStream/"
+out.dir <- "D:/Dropbox/Work/AgroStream/"
 
 # path to save output CSV
 path.out <- paste0(out.dir, "TweetsOut.sqlite")
-
-# path to save the last tweet ID
-path.lastID <- paste0(out.dir, "TweetsOut_LastID.txt")
 
 # path to save the screen output
 path.sink <- paste0(out.dir, "TweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
@@ -61,31 +60,19 @@ auth.t <- read.table(path.auth.t, skip=3, stringsAsFactors=F)[,1]    # read in a
 options(httr_oauth_cache=T)   # this will store authentication as a local file
 setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
 
-# check if lastID file exists
-if (file.exists(path.lastID)){
-  lastID <- read.csv(path.lastID)$id
+# get today/yesterday dates
+  date_today <- as.Date(Sys.time())
+  date_yesterday <- date_today-days(1)
   
   # search twitter!
   tweets <- searchTwitter(search.str, 
                           n=10000, 
                           geocode='39.833333,-98.583333,1500mi',
                           resultType="recent",
-                          sinceID=lastID,
+                          since=as.character(date_yesterday),
+                          until=as.character(date_today),
                           retryOnRateLimit=5000)
   
-} else {
-  # search twitter using last week
-  date_today <- as.Date(Sys.time())
-  date_1week <- date_today - days(7)
-  
-  tweets <- searchTwitter(search.str, 
-                          n=10000, 
-                          geocode='39.833333,-98.583333,1500mi',
-                          resultType="recent",
-                          since=as.character(date_1week),
-                          retryOnRateLimit=5000)
-}
-
 # get rid of retweets
 tweets <- strip_retweets(tweets, strip_manual=T, strip_mt=T)
 
@@ -95,6 +82,9 @@ df <- twListToDF(tweets)[,c("text", "created", "id", "screenName", "isRetweet", 
 # convert text to UTF-8 to deal with weird characters
 df$text <- sapply(df$text, function(row) iconv(row, to='UTF-8'))
 df$text <- gsub("\n", " ", df$text)
+
+# get rid of tweets referring to The Tribez (an android game where people plant things)
+df <- subset(df, !grepl(tolower("The Tribez"), tolower(df$text)))
 
 ## using Google Maps API, get estimated geographic coordinates based on user location
 # limit of 2500/day! so, get clean location as much as possible first to minimize calls to API
@@ -241,8 +231,8 @@ dbWriteTable(db, "tweets", df.out, append=T)
 # when you're done, disconnect from database (this is when the data will be written)
 dbDisconnect(db)
 
-# write a text file with the last ID found, which will be used for future runs
-write.table(data.frame(id=max(df.out$id)), path.lastID, row.names=F)
+# print status update
+print(paste0(dim(df.out)[1], " tweets added to database"))
 
 # close sink
 close(s)
