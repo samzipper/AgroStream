@@ -1,4 +1,4 @@
-## SearchAndStoreTweets_CornPlanting.R
+## SearchAndStoreTweets.R
 #' This script is intended to:
 #'  (1) search Twitter for a keyword or set of keywords
 #'  (2) download all matching Tweets
@@ -27,7 +27,7 @@ search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plan
 #out.dir <- "C:/Users/Sam/Dropbox/Work/AgroStream/"
 out.dir <- "D:/Dropbox/Work/AgroStream/"
 
-# path to save output CSV
+# path to save output data
 path.out <- paste0(out.dir, "TweetsOut.sqlite")
 
 # path to save the screen output
@@ -217,6 +217,9 @@ df.out <- df.out[!duplicated(df.out[c("screenName", "text")]), ]
 
 # put in order
 df.out <- df.out[order(df.out$id), ]
+
+# convert dates to character string for database
+df.out$created <- as.character(df.out$created)
 
 ## put into database
 # create/connect to database
