@@ -61,8 +61,8 @@ options(httr_oauth_cache=T)   # this will store authentication as a local file
 setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
 
 # get today/yesterday dates
-date_start <- as.Date(ymd("2017-03-23"))  # this date is included
-date_end <- as.Date(ymd("2017-03-26"))    # this date is not included
+date_start <- as.Date(ymd("2017-04-23"))  # this date is included
+date_end <- as.Date(ymd("2017-04-25"))    # this date is not included
 
 # search twitter!
 tweets <- searchTwitter(search.str, 
