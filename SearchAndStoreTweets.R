@@ -131,7 +131,7 @@ df.users <- df.users[!(df.users$location %in% big.geo), ]
 locations <- unique(df.users$location)
 
 # call geocode
-geo.out <- geocode(locations, source="google", output="all", source = "google")
+geo.out <- geocode(locations, source="google", output="all")
 
 ## filter output
 # status check: did geocode find a location?
