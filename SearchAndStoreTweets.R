@@ -121,8 +121,8 @@ df.users <- df.users[
          )==0, ]
 
 ## filter locations to eliminate any that are just a large geographic region name (exact matching)
-big.geo <- c("United Nations", "Earth", "United States", "USA", "US", "America", 
-            "North America", "South America")
+big.geo <- c("United Nations", "Earth", "United States", "USA", "US", "America", "United States of America",
+             "North America", "South America")
 
 # get rid of locations that are just a state name
 df.users <- df.users[!(df.users$location %in% big.geo), ]
@@ -136,14 +136,19 @@ geo.out <- geocode(locations, source="google", output="all")
 ## filter output
 # status check: did geocode find a location?
 check.status <- sapply(geo.out, function(x) x["status"]=="OK" & length(x["status"])>0)
+check.status[is.na(check.status)] <- F
+geo.out <- geo.out[check.status]
+locations <- locations[check.status]
 
 # status check: is location ambiguous?
 check.ambig <- sapply(lapply(geo.out, lapply, length), function(x) x["results"]=="1")
+geo.out <- geo.out[check.ambig]
+locations <- locations[check.ambig]
 
 # status check: is location resolved to state level?
 # acceptable google address component codes, from https://developers.google.com/maps/documentation/geocoding/intro
 add.comp.state <- c("locality", "postal_code", "neighborhood", "park", "sublocality", "locality",
-                        paste0("administrative_area_level_", seq(1,5)))
+                    paste0("administrative_area_level_", seq(1,5)))
 
 state.resolved <- function(i.location, geocodes=geo.out){
   # custom function to determine if any subcounty address component exists
@@ -168,19 +173,15 @@ state.resolved <- function(i.location, geocodes=geo.out){
     return(FALSE)
     
   }
-}
+} 
 
 check.state <- unlist(lapply(1:length(locations), FUN=state.resolved))   # apply state check function
-
-# combine all checks into a single logical
-check.all <- check.status & check.ambig & check.state
-
-# trim geo.out
-geo.out <- geo.out[check.all]
+geo.out <- geo.out[check.state]
+locations <- locations[check.state]
 
 ## make final locations data frame
 df.locations <- data.frame(
-  location = locations[check.all],
+  location = locations,
   lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
   lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
 )

@@ -61,8 +61,8 @@ options(httr_oauth_cache=T)   # this will store authentication as a local file
 setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
 
 # get today/yesterday dates
-date_start <- as.Date(ymd("2017-04-28"))  # this date is included
-date_end <- as.Date(ymd("2017-04-29"))    # this date is not included
+date_start <- as.Date(ymd("2017-04-29"))  # this date is included
+date_end <- as.Date(ymd("2017-05-01"))    # this date is not included
 
 # search twitter!
 tweets <- searchTwitter(search.str, 
@@ -121,7 +121,7 @@ df.users <- df.users[
   )==0, ]
 
 ## filter locations to eliminate any that are just a large geographic region name (exact matching)
-big.geo <- c("United Nations", "Earth", "United States", "USA", "US", "America", 
+big.geo <- c("United Nations", "Earth", "United States", "USA", "US", "America", "United States of America",
              "North America", "South America")
 
 # get rid of locations that are just a state name
@@ -136,9 +136,14 @@ geo.out <- geocode(locations, source="google", output="all")
 ## filter output
 # status check: did geocode find a location?
 check.status <- sapply(geo.out, function(x) x["status"]=="OK" & length(x["status"])>0)
+check.status[is.na(check.status)] <- F
+geo.out <- geo.out[check.status]
+locations <- locations[check.status]
 
 # status check: is location ambiguous?
 check.ambig <- sapply(lapply(geo.out, lapply, length), function(x) x["results"]=="1")
+geo.out <- geo.out[check.ambig]
+locations <- locations[check.ambig]
 
 # status check: is location resolved to state level?
 # acceptable google address component codes, from https://developers.google.com/maps/documentation/geocoding/intro
@@ -151,36 +156,32 @@ state.resolved <- function(i.location, geocodes=geo.out){
   #   output will be a logical (T/F)
   
   # check if it found any results
-  if (length(geocodes[[i.location]]$results)>0){
-    
-    # figure out number of address components returned for this location
-    n.add.comp <- length(geocodes[[i.location]]["results"]$results[[1]]$address_components)
-    
-    # extract address component types for this location
-    add.comp.types <- unlist(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
-    
-    # see if any address component types are at subcounty level
-    return(sum(add.comp.types %in% add.comp.state)>0)
-    
-  } else {
-    # if no results found, output is false
-    
-    return(FALSE)
-    
-  }
-}
+    if (length(geocodes[[i.location]]$results)>0){
+      
+      # figure out number of address components returned for this location
+      n.add.comp <- length(geocodes[[i.location]]["results"]$results[[1]]$address_components)
+      
+      # extract address component types for this location
+      add.comp.types <- unlist(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
+      
+      # see if any address component types are at subcounty level
+      return(sum(add.comp.types %in% add.comp.state)>0)
+      
+    } else {
+      # if no results found, output is false
+      
+      return(FALSE)
+      
+    }
+  } 
 
 check.state <- unlist(lapply(1:length(locations), FUN=state.resolved))   # apply state check function
-
-# combine all checks into a single logical
-check.all <- check.status & check.ambig & check.state
-
-# trim geo.out
-geo.out <- geo.out[check.all]
+geo.out <- geo.out[check.state]
+locations <- locations[check.state]
 
 ## make final locations data frame
 df.locations <- data.frame(
-  location = locations[check.all],
+  location = locations,
   lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
   lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
 )
