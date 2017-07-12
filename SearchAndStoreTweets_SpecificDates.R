@@ -24,8 +24,8 @@ search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plan
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
-#out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
-out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
+out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+#out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to save output data
 path.out <- paste0(out.dir, "TweetsOut.sqlite")
@@ -61,8 +61,8 @@ options(httr_oauth_cache=T)   # this will store authentication as a local file
 setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
 
 # get today/yesterday dates
-date_start <- as.Date(ymd("2017-04-29"))  # this date is included
-date_end <- as.Date(ymd("2017-05-01"))    # this date is not included
+date_start <- as.Date(ymd("2017-06-16"))  # this date is included
+date_end <- as.Date(ymd("2017-06-18"))    # this date is not included
 
 # search twitter!
 tweets <- searchTwitter(search.str, 

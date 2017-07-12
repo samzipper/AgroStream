@@ -24,8 +24,8 @@ search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plan
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
-#out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
-out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
+out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+#out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to save output data
 path.out <- paste0(out.dir, "TweetsOut.sqlite")
