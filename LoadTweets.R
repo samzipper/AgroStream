@@ -18,8 +18,8 @@ require(ROAuth)
 require(dplyr)
 
 # output directory: this is where the SQLite database is
-#out.dir <- "C:/Users/Sam/Dropbox/Work/AgroStream/"
-out.dir <- "D:/Dropbox/Work/AgroStream/"
+out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+#out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to database
 path.out <- paste0(out.dir, "TweetsOut.sqlite")
@@ -36,14 +36,16 @@ dbDisconnect(db)
 # plot of tweets by day
 df$created <- ymd_hms(df$created)
 df$DOY <- yday(df$created)
-df.d <- summarize(group_by(df, DOY),
+df$Date <- as.Date(df$created)
+df.d <- summarize(group_by(df, Date),
                   tweets = sum(is.finite(lat.location)))
 
 # print most recent tweet
-print(paste0("Last tweet: ", df$created[dim(df)[1]]))
+print(paste0("Last tweet: ", df$created[which.max(df$id)]))
 
 p.bar.tweets.DOY <-
-  ggplot(df.d, aes(x=DOY, y=tweets)) +
+  ggplot(df.d, aes(x=Date, y=tweets)) +
   geom_bar(stat="identity") +
   theme_bw() +
   theme(panel.grid=element_blank())
+p.bar.tweets.DOY
