@@ -39,15 +39,14 @@ dbDisconnect(db)
 ## convert lat/long to states
 ## based on StackOverflow answer here: https://stackoverflow.com/questions/8751497/latitude-longitude-coordinates-to-state-code-in-r
 # read in shapefile of states
-states.shp <- readOGR(paste0(git.dir, "States_Provinces"), "ne_10m_admin_1_states_provinces_lakes")
-states.shp <- subset(states.shp, geonunit=="United States of America" & name != "Alaska" & name != "Hawaii")  # subset to contiguous USA only
+states.shp <- readOGR(paste0(git.dir, "US_States"), "US_States")
 
 # make SpatialPoints from database
 locations.pts <- SpatialPoints(data.frame(lon = df$lon.location,
                                           lat = df$lat.location))
 
 locations.geotag <- data.frame(lon=as.numeric(df$longitude),
-                                   lat=as.numeric(df$latitude))
+                               lat=as.numeric(df$latitude))
 
 locations.geotag.pts <- SpatialPoints(locations.geotag[is.finite(locations.geotag$lon), ])
 
