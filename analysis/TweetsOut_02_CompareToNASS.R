@@ -25,7 +25,7 @@ require(viridis)
 require(ggthemes)
 require(zoo)
 require(reshape2)
-source(paste0(git.dir, "analysis/plot_colors.R"))
+source(paste0(git.dir, "analysis/plots/plot_colors.R"))
 
 # function for state abbreviation - function from https://gist.github.com/ligyxy/acc1410041fe2938a2f5
 abb2state <- function(name, convert = F, strict = F){
@@ -101,9 +101,15 @@ df$date <- as.Date(ymd_hms(df$created))
 df$DOY <- yday(df$date)
 df$week <- week(df$date-days(1))  # -1 to match with NASS week endings
 
+## summarize by state
+df.state <- dplyr::summarize(group_by(df, state.abb),
+                             n.tweets = sum(is.finite(as.numeric(id))))
+df.state$tweets.per.week <- df.state$n.tweets/length(unique(df$week))
+
 ## cycle through crops and states
-crop.list <- c("corn")         # eventually: do both corn and soy
-state.list <- c("IL")          # eventually: select state list based on some tweet threshold
+tweet.per.week.thres <- 20    # only analyze states with this many tweets
+state.list <- df.state$state.abb[df.state$tweets.per.week >= tweet.per.week.thres & df.state$state.abb %in% unique(df.NASS$state.abb)]
+crop.list <- c("corn", "soy")
 
 for (s in state.list){
   # subset to data from this state
@@ -113,7 +119,7 @@ for (s in state.list){
   for (crop in crop.list){
     # subset to data for this crop
     df.state.crop <- df.state[str_detect(df.state$text, crop), ]
-    df.NASS.state.crop <- subset(df.NASS.state, str_to_lower(Commodity)==crop)
+    df.NASS.state.crop <- subset(df.NASS.state, str_detect(str_to_lower(Commodity), crop))
     
     ## summarize by day
     df.d <- summarize(group_by(df.state.crop, date),
@@ -173,45 +179,47 @@ for (s in state.list){
     
     ## merge with NASS data
     df.w <- merge(df.w, df.NASS.state.crop, by=c("week"), all=T)
-    df.w.melt <- melt(df.w[,c("week", "tweets", "tweets.norm", "tweets.cum", "progress.twitter", "progress.NASS")], 
-                      id=c("week", "tweets", "tweets.norm", "tweets.cum"))
-    
-    ## diagnostic plots
-    p.bar.d <- 
-      ggplot(df.d, aes(x=date, y=tweets, fill=gapfill)) +
-      geom_bar(stat="identity")
-    
-    p.bar.w <- 
-      ggplot(df.w[2:(dim(df.w)[1]-1), ], aes(x=week, y=tweets)) +
-      geom_bar(stat="identity")
-    
-    p.tweets.w <- 
-      ggplot(df.w, aes(x=week, y=tweets.cum)) +
-      geom_line() + geom_point()
-    
-    p.tweets.fit.w <- 
-      ggplot(df.w, aes(x=week, y=tweets.cum)) +
-      geom_point() + 
-      geom_line(data=df.w, aes(x=week, y=tweets.fit))
-    
-    p.tweets.prc.w <- 
-      ggplot(df.w, aes(x=week, y=progress.twitter)) +
-      geom_line() + geom_point()
-    
-    p.NASS.w <-
-      ggplot(df.w, aes(x=week, y=progress.NASS)) +
-      geom_line() + geom_point()
-    
-    p.comp.w <-
-      ggplot(df.w.melt, aes(x=week, y=value, color=variable)) +
-      geom_line() + 
-      geom_point() +
-      scale_color_manual(name="Source", labels=c("progress.twitter"="Twitter", "progress.NASS"="NASS"), 
-                         values=c("progress.twitter"=col.blue, "progress.NASS"=col.red)) +
-      scale_x_continuous(name="Week") +
-      scale_y_continuous(name="Percent Planted") +
-      ggtitle(paste0(s, " ", crop)) +
-      theme_SCZ()
+
+    ## add info and make overall data frame
+    df.w$crop <- crop
+    df.w$state.abb <- s
+    if (exists("df.all")){
+      df.all <- rbind(df.all, df.w)
+    } else {
+      df.all <- df.w
+    }
     
   }
 }
+
+## make plot
+df.melt <- melt(df.all[,c("week", "crop", "state.abb", "progress.twitter", "progress.NASS")],
+                id=c("week", "crop", "state.abb"))
+
+p.facet.prc <-
+  ggplot(df.melt, aes(x=week, y=value, color=variable)) +
+  geom_line() +
+  geom_point() +
+  facet_grid(crop ~ state.abb) +
+  scale_color_manual(name="Source", labels=c("progress.twitter"="Twitter", "progress.NASS"="NASS"),
+                     values=c("progress.twitter"=col.blue, "progress.NASS"=col.red)) +
+  scale_x_continuous(name="Week") +
+  scale_y_continuous(name="% Planted") +
+  theme_SCZ() +
+  theme(legend.position="bottom")
+ggsave(paste0(git.dir, "analysis/plots/TweetsOut_02_CompareToNASS_p.facet.prc.png"),
+       p.facet.prc, width=12, height=8, units="in")
+
+p.facet.scatter <-
+  ggplot(df.all, aes(x=progress.NASS, y=progress.twitter)) +
+  geom_abline(intercept=0, slope=1, color="gray65") +
+  geom_point(aes(color=state.abb)) +
+  stat_smooth(method="lm") +
+  facet_grid(.~crop) +
+  scale_x_continuous(name="% Planted, NASS", limits=c(0,100)) +
+  scale_y_continuous(name="% Planted, Twitter", limits=c(0,100)) +
+  scale_color_discrete(name="State") +
+  theme_SCZ() +
+  theme(legend.position="bottom")
+ggsave(paste0(git.dir, "analysis/plots/TweetsOut_02_CompareToNASS_p.facet.scatter.png"),
+       p.facet.scatter, width=12, height=8, units="in")
