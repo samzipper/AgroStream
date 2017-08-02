@@ -25,7 +25,9 @@ require(viridis)
 require(ggthemes)
 require(zoo)
 require(reshape2)
+require(hydroGOF)
 source(paste0(git.dir, "analysis/plots/plot_colors.R"))
+source(paste0(git.dir, "analysis/interp.R"))
 
 # function for state abbreviation - function from https://gist.github.com/ligyxy/acc1410041fe2938a2f5
 abb2state <- function(name, convert = F, strict = F){
@@ -49,6 +51,20 @@ abb2state <- function(name, convert = F, strict = F){
   }
   sapply(name, single.a2s)
 }
+
+## script control variables
+# which crops to analyze?
+crop.list <- c("corn", "soy")
+
+# minimum activity threshold?
+tweet.per.week.thres <- 2    # only analyze states averaging this many tweets per week
+
+# max user percentage threshold? (% of tweets coming from a single user)
+max.user.prc.thres <- 25
+
+# start/end date for period of interest (20 weeks total)
+date.start <- ymd("2017-02-27")  # start of week 9: 2017-02-27
+date.end <- ymd("2017-07-16")    # end of week 28: 2017-07-16
 
 ## load crop progress report (downloaded from USDA NASS QuickStats)
 df.NASS <- read.csv(paste0(git.dir, "analysis/CropProgress_USDA-NASS.csv"), stringsAsFactors=F)
@@ -75,6 +91,19 @@ df <- dbReadTable(db, "tweets")
 # when you're done, disconnect from database (this is when the data will be written)
 dbDisconnect(db)
 
+## subset data
+# subset to data that uses specific hashtags
+df <- df[str_detect(df$text, "#corn17") | str_detect(df$text, "#soy17") | str_detect(df$text, "#plant17"), ]
+
+# subset to data in crop list
+df <- df[str_detect(df$text, crop.list[1]) | str_detect(df$text, crop.list[2]), ]
+
+# subset based on time
+df$date <- as.Date(ymd_hms(df$created))
+df <- subset(df, date>=date.start & date <= date.end)
+df$DOY <- yday(df$date)
+df$week <- week(df$date-days(1))  # -1 to match with NASS week endings
+
 ## convert lat/long to states
 ## based on StackOverflow answer here: https://stackoverflow.com/questions/8751497/latitude-longitude-coordinates-to-state-code-in-r
 # read in shapefile of states
@@ -84,11 +113,53 @@ states.shp <- readOGR(paste0(git.dir, "US_States"), "US_States")
 locations.pts <- SpatialPoints(data.frame(lon = df$lon.location,
                                           lat = df$lat.location))
 
+locations.geotag <- data.frame(lon=as.numeric(df$longitude),
+                               lat=as.numeric(df$latitude))
+
+locations.geotag.pts <- SpatialPoints(locations.geotag[is.finite(locations.geotag$lon), ])
+
 # make sure same projection
 proj4string(locations.pts) <- proj4string(states.shp)
+proj4string(locations.geotag.pts) <- proj4string(states.shp)
 
-# add state name to data frame
-df$state <- as.character(over(locations.pts, states.shp)$name)
+## add state name from profile location to data frame
+df$state.loc <- as.character(over(locations.pts, states.shp)$name)
+
+## add state name from geotag to data frame
+df$state.geotag[is.finite(locations.geotag$lon)] <- as.character(over(locations.geotag.pts, states.shp)$name)
+
+## add state name if mentioned in tweet
+# figure out if a state is mentioned in the text
+df$state.mention <- NA   # make empty column
+
+states.all <- as.character(states.shp$name)
+states.abb.all <- abb2state(states.all, convert=T)
+
+f.state.mention <- function(x, states.all, states.abb.all){
+  # search for state names and/or abbreviation in text
+  state.mention <- states.all[str_detect(x, states.all)]
+  state.lc.mention <- states.all[str_detect(x, str_to_lower(states.all))]
+  state.caps.mention <- states.all[str_detect(x, str_to_upper(states.all))]
+  state.abb.mention <- states.abb.all[str_detect(x, states.abb.all)]
+  
+  # if it is mentioned in multiple cases, condense to single mention per state
+  state.mention <- unique(str_to_title(c(state.mention, state.lc.mention, state.caps.mention, abb2state(state.abb.mention))))
+  
+  if (length(state.mention)==1){
+    out <- abb2state(state.mention, convert=T)
+  } else {
+    out <- "XX"
+  }
+  
+  return(out)
+}
+
+df$state.mention <- sapply(df$text, f.state.mention, states.all=states.all, states.abb.all=states.abb.all)
+
+## fill in state column with hierarchy: mention > geotag > location
+df$state <- df$state.loc
+df$state[which(df$state.geotag != "NA")] <- df$state.geotag[which(df$state.geotag != "NA")]
+df$state[which(df$state.mention != "XX")] <- abb2state(df$state.mention[which(df$state.mention != "XX")])
 
 # get rid of tweets without a state (out of the US)
 df <- df[!is.na(df$state),]
@@ -96,105 +167,136 @@ df <- df[!is.na(df$state),]
 # make state abbreviate
 df$state.abb <- abb2state(df$state, convert=T)
 
-# do some date calculations
-df$date <- as.Date(ymd_hms(df$created))
-df$DOY <- yday(df$date)
-df$week <- week(df$date-days(1))  # -1 to match with NASS week endings
-
 ## summarize by state
-df.state <- dplyr::summarize(group_by(df, state.abb),
-                             n.tweets = sum(is.finite(as.numeric(id))))
-df.state$tweets.per.week <- df.state$n.tweets/length(unique(df$week))
+df.state.stats <- dplyr::summarize(group_by(df, state.abb),
+                                   n.tweets = sum(is.finite(as.numeric(id))))
+df.state.stats$tweets.per.week <- df.state.stats$n.tweets/length(unique(df$week))
 
 ## cycle through crops and states
-tweet.per.week.thres <- 20    # only analyze states with this many tweets
-state.list <- df.state$state.abb[df.state$tweets.per.week >= tweet.per.week.thres & df.state$state.abb %in% unique(df.NASS$state.abb)]
-crop.list <- c("corn", "soy")
+state.list <- df.state.stats$state.abb[df.state.stats$tweets.per.week >= tweet.per.week.thres & df.state.stats$state.abb %in% unique(df.NASS$state.abb)]
 
 for (s in state.list){
   # subset to data from this state
   df.state <- subset(df, state.abb==s)
   df.NASS.state <- subset(df.NASS, state.abb==s)
-  
   for (crop in crop.list){
+    
     # subset to data for this crop
     df.state.crop <- df.state[str_detect(df.state$text, crop), ]
     df.NASS.state.crop <- subset(df.NASS.state, str_detect(str_to_lower(Commodity), crop))
     
-    ## summarize by day
-    df.d <- summarize(group_by(df.state.crop, date),
-                      tweets = sum(is.finite(lat.location)))
+    # calculate number of tweets per user
+    df.state.crop.tweets.user <- dplyr::summarize(group_by(df.state, screenName),
+                                             tweets = sum(is.finite(date)))
+    max.user.prc <- 100*max(df.state.crop.tweets.user$tweets)/sum(df.state.crop.tweets.user$tweets)
     
-    # linearly interpolate for missing dates: 2017-04-04, 2017-04-07, 2017-04-17
-    df.d <- rbind(df.d, data.frame(date=ymd(c("2017-04-04", "2017-04-07", "2017-04-17")), tweets=NaN))
-    df.d <- df.d[order(df.d$date), ]
-    df.d$gapfill <- is.na(df.d$tweets)
-    df.d$tweets <- round(na.approx(df.d$tweets))
-    df.d$week <- week(df.d$date-days(1))  # -1 to match with NASS week endings
+    # for corn:
+    # IA: max user is 34/203  tweets (16.7%), mjwiegand
+    # IL: max user is 10/185  tweets (5.41%), jwolf3447
+    # KS: max user is 213/255 tweets (83.5%), mjwiegand
+    # MN: max user is 45/135  tweets (33.3%), BRNAgNews_Mark
+    # NE: max user is 255/346 tweets (73.7%), mjwiegand
+    # OH: max user is 94/162  tweets (58.0%), andersonsgrain
     
-    ## summarize by week
-    df.w <- summarize(group_by(df.d, week),
-                      tweets = sum(tweets))
-    df.w <- df.w[2:(dim(df.w)[1]-1), ]   # get rid of first and last week because not full 7 days
-    
-    ## define baseline weekly value
-    wk.baseline <- min(df.w$tweets)  # eventually: more refined technique necessary?
-    df.w$tweets.norm <- df.w$tweets - wk.baseline
-    df.w$tweets.cum <- cumsum(df.w$tweets)
-    df.w$progress.twitter <- 100*df.w$tweets.cum/max(df.w$tweets.cum)
-    
-    ## fit logistic curve to cumulative tweets
-    m1.est <- max(df.w$tweets.cum)
-    m2.est <- 0.5
-    m3.est <- mean(df.w$week)
-    
-    #df.test <- data.frame(week=seq(min(df.w$week),max(df.w$week)))
-    #df.test$tweets.test <- m1.est/(1+exp(-m2.est*(df.test$week-m3.est)))
-    #qplot(x=week, y=tweets.test, data=df.test)
-    
-    log.fit <- nls(tweets.cum ~ (m1.est/(1+exp(-m2*(week-m3)))),
-                   data = df.w,
-                   start = list(#m1 = m1.est, 
-                                m2 = m2.est, 
-                                m3 = m3.est),
-                   trace=T)
-    
-    # prediction using fitted function
-    df.w$tweets.fit <- predict(log.fit, list(week=df.w$week))
-    m2 <- coef(log.fit)[1]
-    m3 <- coef(log.fit)[2]
-    
-    # calculate second derivate of fit, from wolfram alpha second derivative calculator: y = (m1/(1+exp(-m2*(x-m3))))
-    df.w$fit.deriv2 <- (m1.est*(m2^2)*exp(m2*(m3+df.w$week))*(exp(m2*m3)-exp(m2*df.w$week)))/
-      ((exp(m2*m3)+exp(m2*df.w$week))^3)
-    
-    # calculate start and end week as max/min of second derivative
-    wk.start <- df.w$week[which.max(df.w$fit.deriv2)]
-    wk.end <- df.w$week[which.min(df.w$fit.deriv2)]
-    
-    # calculate progress based on wk.start and wk.end
-    df.w <- subset(df.w, week>=(wk.start) & week <= (wk.end))
-    df.w$tweets.cum.sub <- cumsum(df.w$tweets)
-    df.w$progress.twitter <- 100*df.w$tweets.cum.sub/max(df.w$tweets.cum.sub)
-    
-    ## merge with NASS data
-    df.w <- merge(df.w, df.NASS.state.crop, by=c("week"), all=T)
+    if (max.user.prc <= max.user.prc.thres){
+      
+      ## summarize by day
+      df.d <- summarize(group_by(df.state.crop, date),
+                        tweets = sum(is.finite(lat.location)))
+      
+#      # linearly interpolate for missing dates: 2017-04-04, 2017-04-07, 2017-04-17
+#      df.d <- rbind(df.d, data.frame(date=ymd(c("2017-04-04", "2017-04-07", "2017-04-17")), tweets=NaN))
+#      df.d <- df.d[order(df.d$date), ]
+#      df.d$gapfill <- is.na(df.d$tweets)
+#      df.d$tweets <- round(na.approx(df.d$tweets))
 
-    ## add info and make overall data frame
-    df.w$crop <- crop
-    df.w$state.abb <- s
-    if (exists("df.all")){
-      df.all <- rbind(df.all, df.w)
-    } else {
-      df.all <- df.w
-    }
-    
-  }
-}
+      # define week for comparison with NASS
+      df.d$week <- week(df.d$date-days(1))  # -1 to match with NASS week endings
+      
+      ## summarize by week
+      df.w <- summarize(group_by(df.d, week),
+                        tweets = sum(tweets))
+      df.w$tweets.cum <- cumsum(df.w$tweets)
+      
+      ## fit logistic curve to cumulative tweets
+      m1.est <- max(df.w$tweets.cum)
+      m2.est <- 0.5
+      m3.est <- mean(df.w$week)
+      
+      log.fit <- nls(tweets.cum ~ (m1.est/(1+exp(-m2*(week-m3)))),
+                     data = df.w,
+                     start = list(#m1 = m1.est, 
+                       m2 = m2.est, 
+                       m3 = m3.est),
+                     trace=T)
+      
+      # prediction using fitted function
+      df.w$tweets.fit <- predict(log.fit, list(week=df.w$week))
+      m2 <- coef(log.fit)[1]
+      m3 <- coef(log.fit)[2]
+      
+      # calculate second derivate of fit, from wolfram alpha second derivative calculator: y = (m1/(1+exp(-m2*(x-m3))))
+      df.w$fit.deriv2 <- (m1.est*(m2^2)*exp(m2*(m3+df.w$week))*(exp(m2*m3)-exp(m2*df.w$week)))/
+        ((exp(m2*m3)+exp(m2*df.w$week))^3)
+      
+      # calculate start and end week as max/min of second derivative
+      wk.start <- df.w$week[which.max(df.w$fit.deriv2)]
+      wk.end <- df.w$week[which.min(df.w$fit.deriv2)]
+      
+      # add a buffer on either side
+      wk.buffer <- 2
+      wk.start <- wk.start-wk.buffer
+      wk.end <- wk.end+wk.buffer
+      
+      # use entire period of record
+      #    wk.start <- min(df.w$week)
+      #    wk.end <- max(df.w$week)
+      
+      # calculate progress based on wk.start and wk.end
+      df.w <- subset(df.w, week>=(wk.start) & week <= (wk.end))
+      df.w$tweets[1] <- 0
+      df.w$tweets.cum.sub <- cumsum(df.w$tweets)
+      df.w$progress.twitter <- 100*df.w$tweets.cum.sub/max(df.w$tweets.cum.sub)
+      
+      ## merge with NASS data
+      df.w <- merge(df.w, df.NASS.state.crop, by=c("week"), all=T)
+      
+      ## add info and make overall data frame
+      df.w$crop <- crop
+      df.w$state.abb <- s
+      if (exists("df.all")){
+        df.all <- rbind(df.all, df.w)
+      } else {
+        df.all <- df.w
+      }
+      
+    }  # end of max.user.prc.thres if statement
+  }  # end of crop loop
+}  # end of state loop
 
 ## make plot
 df.melt <- melt(df.all[,c("week", "crop", "state.abb", "progress.twitter", "progress.NASS")],
                 id=c("week", "crop", "state.abb"))
+
+# calculate date of 10%, 50%, 90% planted
+df.plant <- dplyr::summarize(group_by(df.melt[complete.cases(df.melt),], crop, state.abb, variable),
+                             plant.10 = interp(x=value, y=week, x.in=10),
+                             plant.25 = interp(x=value, y=week, x.in=25),
+                             plant.50 = interp(x=value, y=week, x.in=50),
+                             plant.75 = interp(x=value, y=week, x.in=75),
+                             plant.90 = interp(x=value, y=week, x.in=90))
+df.plant.melt <- melt(df.plant, id=c("crop", "state.abb", "variable"), value.name="progress", variable.name="prc")
+df.plant.cast <- dcast(df.plant.melt, crop + state.abb + prc ~ variable, value.var="progress")
+
+p.facet.tweets <-
+  ggplot(df.all, aes(x=week, y=tweets)) +
+  geom_hline(yintercept=0, color="gray65") +
+  geom_line() +
+  geom_point() +
+  facet_grid(crop ~ state.abb, scales="free_y") +
+  scale_x_continuous(name="Week") +
+  scale_y_continuous(name="Tweets") +
+  theme_SCZ()
 
 p.facet.prc <-
   ggplot(df.melt, aes(x=week, y=value, color=variable)) +
@@ -223,3 +325,26 @@ p.facet.scatter <-
   theme(legend.position="bottom")
 ggsave(paste0(git.dir, "analysis/plots/TweetsOut_02_CompareToNASS_p.facet.scatter.png"),
        p.facet.scatter, width=12, height=8, units="in")
+
+p.plant.facet.scatter <-
+  ggplot(df.plant.cast, aes(x=progress.NASS, y=progress.twitter)) +
+  geom_abline(intercept=0, slope=1, color="gray65") +
+  geom_point(aes(color=state.abb)) +
+  facet_grid(crop ~ prc, scales="free",
+             labeller=as_labeller(c("plant.10"="10%", "plant.25"="25%", "plant.50"="50%", "plant.75"="75%", "plant.90"="90%",
+                                    "corn"="Corn", "soy"="Soy"))) +
+  scale_x_continuous(name="Week, NASS") +
+  scale_y_continuous(name="Week, Twitter") +
+  scale_color_discrete(name="State") +
+  theme_SCZ() +
+  theme(legend.position="bottom")
+ggsave(paste0(git.dir, "analysis/plots/TweetsOut_02_CompareToNASS_p.plant.facet.scatter.png"),
+       p.plant.facet.scatter, width=12, height=8, units="in")
+
+## summarize by state and crop
+# comparing progress (units are %)
+df.fit <- dplyr::summarize(group_by(df.all, state.abb, crop),
+                           RMSE = rmse(progress.twitter, progress.NASS),
+                           NSE = NSE(progress.twitter, progress.NASS),
+                           KGE = KGE(progress.twitter, progress.NASS),
+                           bias.prc = pbias(progress.twitter, progress.NASS))

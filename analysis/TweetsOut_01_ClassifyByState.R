@@ -24,6 +24,29 @@ require(rgdal)
 require(viridis)
 require(ggthemes)
 
+# function for state abbreviation - function from https://gist.github.com/ligyxy/acc1410041fe2938a2f5
+abb2state <- function(name, convert = F, strict = F){
+  data(state)
+  # state data doesn't include DC
+  state = list()
+  state[['name']] = c(state.name,"District Of Columbia")
+  state[['abb']] = c(state.abb,"DC")
+  
+  if(convert) state[c(1,2)] = state[c(2,1)]
+  
+  single.a2s <- function(s){
+    if(strict){
+      is.in = tolower(state[['abb']]) %in% tolower(s)
+      ifelse(any(is.in), state[['name']][is.in], NA)
+    }else{
+      # To check if input is in state full name or abb
+      is.in = rapply(state, function(x) tolower(x) %in% tolower(s), how="list")
+      state[['name']][is.in[[ifelse(any(is.in[['name']]), 'name', 'abb')]]]
+    }
+  }
+  sapply(name, single.a2s)
+}
+
 # path to database
 path.out <- paste0(git.dir, "TweetsOut.sqlite")
 
@@ -63,29 +86,6 @@ df <- df[!is.na(df$state),]
 
 # convert state names to lowercase with column name 'region' for merge with map data
 df$region <- str_to_lower(df$state)
-
-# function for state abbreviation - function from https://gist.github.com/ligyxy/acc1410041fe2938a2f5
-abb2state <- function(name, convert = F, strict = F){
-  data(state)
-  # state data doesn't include DC
-  state = list()
-  state[['name']] = c(state.name,"District Of Columbia")
-  state[['abb']] = c(state.abb,"DC")
-  
-  if(convert) state[c(1,2)] = state[c(2,1)]
-  
-  single.a2s <- function(s){
-    if(strict){
-      is.in = tolower(state[['abb']]) %in% tolower(s)
-      ifelse(any(is.in), state[['name']][is.in], NA)
-    }else{
-      # To check if input is in state full name or abb
-      is.in = rapply(state, function(x) tolower(x) %in% tolower(s), how="list")
-      state[['name']][is.in[[ifelse(any(is.in[['name']]), 'name', 'abb')]]]
-    }
-  }
-  sapply(name, single.a2s)
-}
 
 # summarize by state
 df.state <- dplyr::summarize(group_by(df, region),
