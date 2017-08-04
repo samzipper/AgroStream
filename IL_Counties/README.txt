@@ -1,0 +1,1 @@
+Downloaded from http://clearinghouse.isgs.illinois.edu/data/reference/illinois-county-boundaries-polygons-and-lines on 8/4/2017

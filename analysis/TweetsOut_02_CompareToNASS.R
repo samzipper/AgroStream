@@ -111,7 +111,7 @@ df <- df[str_detect(str_to_lower(df$text), "#corn") | str_detect(str_to_lower(df
 # subset to data in crop list
 df <- df[str_detect(str_to_lower(df$text), crop.list[1]) | str_detect(str_to_lower(df$text), crop.list[2]), ]
 
-## summarize by state and crop
+## summarize by crop
 for (crop in crop.list){
   df.crop <- df[str_detect(df$text, crop), ]
   df.crop$crop <- crop
