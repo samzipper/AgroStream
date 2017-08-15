@@ -20,7 +20,8 @@ require(DBI)
 require(ROAuth)
 
 # search string: what will you search twitter for?
-search.str <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017)) OR #corn17 OR #corn2017 OR #soy17 OR #soy2017 OR #wheat17 OR #wheat2017"
+search.str.1 <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018))"
+search.str.2 <- "#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 OR #corn2019 OR #soy17 OR #soy2017 OR #soy18 OR #soy2018 OR #soy19 OR #soy2019 OR #wheat17 OR #wheat2017 OR #wheat18 OR #wheat2018 OR #wheat19 OR #wheat2019"
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
@@ -61,11 +62,11 @@ options(httr_oauth_cache=T)   # this will store authentication as a local file
 setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
 
 # get today/yesterday dates
-date_start <- as.Date(ymd("2017-06-16"))  # this date is included
-date_end <- as.Date(ymd("2017-06-18"))    # this date is not included
+date_start <- as.Date(ymd("2017-08-08"))  # this date is included
+date_end <- as.Date(ymd("2017-08-15"))    # this date is not included
 
 # search twitter!
-tweets <- searchTwitter(search.str, 
+tweets.1 <- searchTwitter(search.str.1, 
                         n=10000, 
                         geocode='39.833333,-98.583333,1500mi',
                         resultType="recent",
@@ -73,11 +74,24 @@ tweets <- searchTwitter(search.str,
                         until=as.character(date_end),
                         retryOnRateLimit=5000)
 
+tweets.2 <- searchTwitter(search.str.2, 
+                        n=10000, 
+                        geocode='39.833333,-98.583333,1500mi',
+                        resultType="recent",
+                        since=as.character(date_start),
+                        until=as.character(date_end),
+                        retryOnRateLimit=5000)
+
+tweets <- append(tweets.1, tweets.2)
+
 # get rid of retweets
 tweets <- strip_retweets(tweets, strip_manual=T, strip_mt=T)
 
 # put into data frame (only categories we care about)
 df <- twListToDF(tweets)[,c("text", "created", "id", "screenName", "isRetweet", "longitude", "latitude")]
+
+# get rid of duplicates just in case
+df <- unique(df)
 
 # convert text to UTF-8 to deal with weird characters
 df$text <- sapply(df$text, function(row) iconv(row, to='UTF-8'))
