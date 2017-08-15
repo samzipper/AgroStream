@@ -25,8 +25,8 @@ search.str.2 <- "#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 OR #cor
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
-out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
-#out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
+#out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to save output data
 path.out <- paste0(out.dir, "TweetsOut.sqlite")
@@ -110,8 +110,9 @@ df.users <- twListToDF(userInfo)
 # trim to only users with location info
 df.users <- df.users[df.users$location != "",]
 
-# replace % in user location with blank so geocode doesn't get messed up
+# replace % and # in user location with blank so geocode doesn't get messed up
 df.users$location <- gsub("%", " ",df.users$location)
+df.users$location <- gsub("#", " ",df.users$location)
 
 # trim leading/trailing white space
 df.users$location <- trimws(df.users$location)
