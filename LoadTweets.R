@@ -30,6 +30,10 @@ db <- dbConnect(RSQLite::SQLite(), path.out)
 # read in table
 df <- dbReadTable(db, "tweets")
 
+# trim to unique and rewrite
+df <- unique(df)
+dbWriteTable(db, "tweets", df, overwrite=T)
+
 # when you're done, disconnect from database (this is when the data will be written)
 dbDisconnect(db)
 
