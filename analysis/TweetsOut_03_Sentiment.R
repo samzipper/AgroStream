@@ -27,6 +27,7 @@ require(ggthemes)
 require(zoo)
 require(reshape2)
 require(hydroGOF)
+require(wordcloud)
 require(tidytext)
 source(paste0(git.dir, "analysis/plots/plot_colors.R"))
 source(paste0(git.dir, "analysis/interp.R"))
@@ -150,6 +151,42 @@ df.DOY.wet.dry.melt <- melt(df.DOY.wet.dry, id=c("DOY"))
 # mentions of no tille
 df$no.till <- str_detect(df$text, "no till")|str_detect(df$text, "no-till")|str_detect(df$text, "notill")
 
+# mentions of replant
+df$replant <- str_detect(str_to_lower(df$text), "replant")
+
+# mentions of rain or wet
+df$rain.wet <- str_detect(str_to_lower(df$text), "rain")|str_detect(str_to_lower(df$text), "wet")
+df$wet <- str_detect(str_to_lower(df$text), "wet")
+
+# sum by state replant and rain
+df.state.replant <- dplyr::summarize(group_by(df, state.abb),
+                                     replant = sum(replant),
+                                     rain.wet = sum(rain.wet))
+
+# sum replant and rain for IL
+df.IL.replant <- dplyr::summarize(group_by(subset(df, state.abb=="IL"), DOY),
+                                  n.tweets = sum(is.finite(DOY)),
+                                  n.rain = sum(rain.wet),
+                                  n.replant = sum(replant))
+df.IL.replant$rain.tweets <- df.IL.replant$n.rain/df.IL.replant$n.tweets
+df.IL.replant$replant.tweets <- df.IL.replant$n.replant/df.IL.replant$n.tweets
+
+# sum replant and rain for all DOY, all states
+df.DOY.replant <- dplyr::summarize(group_by(df, DOY),
+                                   n.tweets = sum(is.finite(DOY)),
+                                   n.rain = sum(rain.wet),
+                                   n.replant = sum(replant))
+df.DOY.replant$rain.tweets <- df.DOY.replant$n.rain/df.DOY.replant$n.tweets
+df.DOY.replant$replant.tweets <- df.DOY.replant$n.replant/df.DOY.replant$n.tweets
+
+# daily mentions of replant and total negative words
+df.token$replant <- str_detect(df.token$word, "replant")
+df.replant.sentiment <- dplyr::summarize(group_by(df.token, DOY),
+                                         n.replant = sum(replant),
+                                         n.score.neg = sum(score<0, na.rm=T),
+                                         n.score.tot = sum(is.finite(score)),
+                                         mean.score = mean(score, na.rm=T))
+
 ## make map
 # prepare polygon for ggplot
 df.state.sentiment$region <- str_to_lower(df.state.sentiment$state)
@@ -214,6 +251,29 @@ p.sentiment.time <-
   theme_bw() +
   theme(panel.grid=element_blank(),
         panel.border=element_blank())
+
+# IL replant/rain
+p.IL.replant.norm <-
+  ggplot(melt(df.IL.replant, id=c("DOY", "n.tweets", "n.rain", "n.replant")), aes(x=DOY, y=value, color=variable)) +
+  geom_line()
+
+p.IL.replant <-
+  ggplot(melt(df.IL.replant, id=c("DOY", "n.tweets", "rain.tweets", "replant.tweets")), aes(x=DOY, y=value, color=variable)) +
+  geom_line()
+
+# all states replant/rain
+p.DOY.replant.norm <- 
+  ggplot(melt(df.DOY.replant, id=c("DOY", "n.tweets", "n.rain", "n.replant")), aes(x=DOY, y=value, color=variable)) +
+  geom_line()
+
+p.DOY.replant <-
+  ggplot(melt(df.DOY.replant, id=c("DOY", "n.tweets", "rain.tweets", "replant.tweets")), aes(x=DOY, y=value, color=variable)) +
+  geom_line()
+
+# replant with sentiment
+p.replant.sentiment <-
+  ggplot(melt(df.replant.sentiment, id=c("DOY", "n.score.neg", "n.score.tot")), aes(x=DOY, y=value, color=variable)) +
+  geom_line()
 
 # wordcloud
 p.wordcloud <- 

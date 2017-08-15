@@ -81,12 +81,15 @@ IL.df$county <- IL.df$id
 
 ## tweets/day/county
 df.c.DOY <- dplyr::summarize(group_by(df, county, DOY),
-                             tweets.day = sum(is.finite(as.numeric(id))))
+                             tweets.day = sum(is.finite(as.numeric(id))),
+                             tweets.replant = sum(str_detect(str_to_lower(text), "replant")))
 
 ## tweets/county
 df.c <- dplyr::summarize(group_by(df.c.DOY, county),
                          n.tweets = sum(tweets.day),
+                         n.tweets.replant = sum(tweets.replant),
                          max.tweets.DOY = max(tweets.day))
+df.c$replant.tweets <- df.c$n.tweets.replant/df.c$n.tweets
 
 ## DOY of max tweets for each county
 # must be counties with >= 5 tweets, and max.tweets.DOY > 1
@@ -106,6 +109,10 @@ df.map <- left_join(df.map, df.max.county.DOY[,c("county", "DOY.max")], by="coun
 ## make map
 p.IL.tweets <-
   ggplot(df.map, aes(x=long, y=lat, group=group, fill=log10(n.tweets))) +
+  geom_polygon()
+
+p.IL.tweets.replant <-
+  ggplot(df.map, aes(x=long, y=lat, group=group, fill=replant.tweets)) +
   geom_polygon()
 
 p.IL.DOY.max <-
