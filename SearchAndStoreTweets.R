@@ -70,16 +70,16 @@ tweets.1 <- searchTwitter(search.str.1,
                           n=10000, 
                           geocode='39.833333,-98.583333,1500mi',
                           resultType="recent",
-                          since=as.character(date_start),
-                          until=as.character(date_end),
+                          since=as.character(date_yesterday),
+                          until=as.character(date_today),
                           retryOnRateLimit=5000)
 
 tweets.2 <- searchTwitter(search.str.2, 
                           n=10000, 
                           geocode='39.833333,-98.583333,1500mi',
                           resultType="recent",
-                          since=as.character(date_start),
-                          until=as.character(date_end),
+                          since=as.character(date_yesterday),
+                          until=as.character(date_today),
                           retryOnRateLimit=5000)
 
 tweets <- append(tweets.1, tweets.2)
