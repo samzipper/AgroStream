@@ -128,7 +128,7 @@ df.most.time <- dplyr::summarize(group_by(subset(df.token, state.abb==state.sent
 
 # fill in missing days
 missing.DOY <- seq(min(df.most.time$DOY), max(df.most.time$DOY))[which(!(seq(min(df.most.time$DOY), max(df.most.time$DOY)) %in% df.most.time$DOY))]
-df.most.time <- rbind(df.most.time, data.frame(DOY=missing.DOY, sentiment.mean=NaN))
+df.most.time <- rbind(df.most.time, data.frame(DOY=missing.DOY, sentiment.mean=NaN, sentiment.n=NaN))
 
 # for all states, sentiment through time
 df.sentiment.time <- dplyr::summarize(group_by(df.token, DOY),
@@ -193,7 +193,7 @@ df.state.sentiment$region <- str_to_lower(df.state.sentiment$state)
 df.state.wet.dry$region <- str_to_lower(df.state.wet.dry$state)
 data.maps <- map_data("state")
 df.map <- left_join(data.maps, df.state.sentiment, by="region")
-df.map <- left_join(data.maps, df.state.wet.dry, by="region")
+df.map <- left_join(df.map, df.state.wet.dry[,c("wet.dry", "region")], by="region")
 df.map <- df.map[order(df.map$order),]
 
 # map of mean sentiment

@@ -130,7 +130,7 @@ df.map <- df.map[order(df.map$order),]
 p.map <-
   ggplot(df.map, aes(x=long, y=lat, group=group, fill=log10(n.tweets))) +
   geom_polygon(color="white", size=0.25) +
-  scale_fill_viridis(name="log(Tweets)") +
+  scale_fill_viridis(name="log(Tweets)", na.value="gray65") +
 #  scale_color_viridis(name="log(Tweets)", alpha=0.75) +
   scale_x_continuous(name="Longitude", expand=c(0,0)) +
   scale_y_continuous(name="Latitude", expand=c(0,0)) +

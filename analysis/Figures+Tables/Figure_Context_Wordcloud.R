@@ -165,3 +165,11 @@ df.count <- subset(df.count, !str_detect(word, "plant17"))
 wordcloud(df.count$word, df.count$n, max.words=100, rot.per=0.5)
 
 df.count$word[1:100]
+
+## stats
+df.count$n[df.count$word=="nh3"]
+df.count$n[df.count$word=="no-till"]
+100*length(df$state.abb[str_detect(df$text, "irrig")])/dim(df)[1]
+unique(df$state.abb[str_detect(df$text, "irrig")])
+length(df$state.abb[str_detect(df$text, "irrig")])
+unique(df$screenName[str_detect(df$text, "irrig")])
