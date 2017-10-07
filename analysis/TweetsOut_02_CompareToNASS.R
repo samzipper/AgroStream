@@ -54,7 +54,7 @@ abb2state <- function(name, convert = F, strict = F){
 
 ## script control variables
 # make plots?
-make.plots <- T  # logical
+make.plots <- F  # logical
 
 # which crops to analyze?
 crop.list <- c("corn", "soy")
@@ -208,6 +208,26 @@ for (i in 1:dim(df.state.crop.all)[1]){
   df.w$fit.deriv2 <- (tweets.tot*(m2^2)*exp(m2*(m3+df.w$week))*(exp(m2*m3)-exp(m2*df.w$week)))/
     ((exp(m2*m3)+exp(m2*df.w$week))^3)
   
+  ## calculate first/second differences
+  df.w$diff.first <- NaN
+  df.w$diff.second <- NaN
+  df.w$diff.first[2:dim(df.w)[1]] <- diff(df.w$tweets.cum, differences=1)
+  df.w$diff.second[3:dim(df.w)[1]] <- diff(df.w$tweets.cum, differences=2)
+  
+  ## kernel smoothing
+  fit.kern <- kdde(df.w$tweets)
+  
+  ## spline smoothing
+  fit.spline <- smooth.spline(df.w$week, df.w$tweets.cum, spar=0.5)
+  df.w$fit.spline <- predict(fit.spline, x=df.w$week)$y
+  df.w$fit.spline.deriv1 <- predict(fit.spline, x=df.w$week, deriv=1)$y
+  df.w$fit.spline.deriv2 <- predict(fit.spline, x=df.w$week, deriv=2)$y
+  
+  # qplot(x=week, y=fit.spline, data=df.w)+geom_line()+geom_point(data=df.w, aes(x=week, y=tweets.cum), color="red")
+  # qplot(x=week, y=fit.spline.deriv1, data=df.w)+geom_line()
+  # qplot(x=week, y=fit.spline.deriv2, data=df.w)+geom_line()
+  # qplot(x=week, y=fit.deriv2, data=df.w)+geom_line()
+  
   for (wk.buffer.start in seq(0,5)){
     for (wk.buffer.end in seq(0,5)){
       
@@ -215,9 +235,15 @@ for (i in 1:dim(df.state.crop.all)[1]){
       wk.start <- df.w$week[which.max(df.w$fit.deriv2)]
       wk.end <- df.w$week[which.min(df.w$fit.deriv2)]
       
+      wk.start.spline <- df.w$week[which.max(df.w$fit.spline.deriv2)]
+      wk.end.spline <- df.w$week[which.min(df.w$fit.spline.deriv2)]
+      
       # add a buffer on either side
       wk.start <- wk.start-wk.buffer.start
       wk.end <- wk.end+wk.buffer.end
+      
+      wk.start.spline <- wk.start.spline-wk.buffer.start
+      wk.end.spline <- wk.end.spline+wk.buffer.end
       
       ## simple: calculate progress based on cumulative through time
       # calculate progress based on wk.start and wk.end
@@ -226,32 +252,52 @@ for (i in 1:dim(df.state.crop.all)[1]){
       df.w.buffer$tweets.cum.sub <- cumsum(df.w.buffer$tweets)
       df.w.buffer$progress.twitter <- 100*df.w.buffer$tweets.cum.sub/max(df.w.buffer$tweets.cum.sub)
       
-      # ## more complex: calculate progress based on another logistic fit
-      # # fit logistic curve, now based on the subset of data using this buffer
-      # tweets.tot.buffer <- max(df.w.buffer$tweets.cum.sub)
-      # m2.est.buffer <- 0.5
-      # m3.est.buffer <- mean(df.w.buffer$week)
-      # 
-      # log.fit.buffer <- nls(tweets.cum.sub ~ (tweets.tot.buffer/(1+exp(-m2*(week-m3)))),
-      #                data = df.w.buffer,
-      #                start = list(m2 = m2.est.buffer, m3 = m3.est.buffer),
-      #                trace=T)
-      # 
-      # # prediction using fitted function
-      # df.w.buffer$tweets.fit <- predict(log.fit.buffer, list(week=df.w.buffer$week))
-      # 
-      # # estimate progress based on fit
-      # df.w.buffer$progress.fit <- 100*df.w.buffer$tweets.fit/tweets.tot.buffer
+      df.w.buffer.spline <- subset(df.w, week>=(wk.start.spline) & week <= (wk.end.spline))
+      df.w.buffer.spline$tweets[1] <- 0
+      df.w.buffer.spline$tweets.cum.sub <- cumsum(df.w.buffer.spline$tweets)
+      df.w.buffer.spline$progress.twitter <- 100*df.w.buffer.spline$tweets.cum.sub/max(df.w.buffer.spline$tweets.cum.sub)
       
-      ## add info and make overall data frame
+      ## find weeks before/after planting with NASS data; set to 0% and 100%
+      df.w.NASS <- subset(df.w, is.finite(progress.NASS))
+      
+      if (sum(!(df.w.NASS$week %in% df.w.buffer$week))>0){
+        df.w.NASS.log <- subset(df.w.NASS, !(week %in% df.w.buffer$week))
+        df.w.NASS.log$tweets <- NaN
+        df.w.NASS.log$tweets.cum.sub <- NaN
+        df.w.NASS.log$progress.twitter <- NaN
+        df.w.NASS.log$progress.twitter[df.w.NASS.log$week<min(df.w.buffer$week)] <- 0
+        df.w.NASS.log$progress.twitter[df.w.NASS.log$week>max(df.w.buffer$week)] <- 100
+        df.w.buffer <- rbind(df.w.buffer, df.w.NASS.log)
+      }
+      
+      if (sum(!(df.w.NASS$week %in% df.w.buffer.spline$week))>0){
+        df.w.NASS.spline <- subset(df.w.NASS, !(week %in% df.w.buffer.spline$week))
+        df.w.NASS.spline$tweets <- NaN
+        df.w.NASS.spline$tweets.cum.sub <- NaN
+        df.w.NASS.spline$progress.twitter <- NaN
+        df.w.NASS.spline$progress.twitter[df.w.NASS.spline$week<min(df.w.buffer.spline$week)] <- 0
+        df.w.NASS.spline$progress.twitter[df.w.NASS.spline$week>max(df.w.buffer.spline$week)] <- 100
+        df.w.buffer.spline <- rbind(df.w.buffer.spline, df.w.NASS.spline)
+      }
+      
+      ## add info
       df.w.buffer$crop <- c
       df.w.buffer$state.abb <- s
       df.w.buffer$wk.buffer.start <- wk.buffer.start
       df.w.buffer$wk.buffer.end <- wk.buffer.end
+      df.w.buffer$method <- "logistic"
+      
+      df.w.buffer.spline$crop <- c
+      df.w.buffer.spline$state.abb <- s
+      df.w.buffer.spline$wk.buffer.start <- wk.buffer.start
+      df.w.buffer.spline$wk.buffer.end <- wk.buffer.end
+      df.w.buffer.spline$method <- "spline"
+      
+      df.w.out <- rbind(df.w.buffer, df.w.buffer.spline)
       if (exists("df.all")){
-        df.all <- rbind(df.all, df.w.buffer)
+        df.all <- rbind(df.all, df.w.out)
       } else {
-        df.all <- df.w.buffer
+        df.all <- df.w.out
       }
     }
   }

@@ -4,7 +4,6 @@
 #' 
 #' Output from TweetsOut_01_ClassifyByState.R is required.
 
-
 rm(list=ls())
 
 # path to git directory
@@ -146,6 +145,12 @@ df.w <- summarize(group_by(df.d, week),
                   tweets = sum(tweets))
 df.w$tweets.cum <- cumsum(df.w$tweets)
 
+# calculate first/second differences
+df.w$diff.first <- NaN
+df.w$diff.second <- NaN
+df.w$diff.first[2:dim(df.w)[1]] <- diff(df.w$tweets.cum, differences=1)
+df.w$diff.second[3:dim(df.w)[1]] <- diff(df.w$tweets.cum, differences=2)
+
 ## merge with NASS data
 df.w <- merge(df.w, df.NASS.state.crop, by=c("week"), all=T)
 
@@ -250,3 +255,5 @@ grid.arrange(p.tweets.buffer+theme(text=element_blank(), plot.margin=unit(c(0.5,
              p.comparison+theme(text=element_blank(), plot.margin=unit(c(0.5, 0.5, 0.5, 0.5), "mm")),
              ncol=1)
 dev.off()
+
+## exploratory plots of first and second differencing
