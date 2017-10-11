@@ -108,28 +108,38 @@ df.sentiments <- get_sentiments("afinn")
 # add to token data frame
 df.token <- left_join(df.token, df.sentiments, by=c("word"))
 
-# average sentiment by state
-df.state.sentiment <-
-  dplyr::summarize(group_by(df.token, state, state.abb),
-                   sentiment.mean = mean(score, na.rm=T),
-                   sentiment.n = sum(is.finite(score)))
-
-# get rid of states with < 10 sentiment words
-df.state.sentiment <- subset(df.state.sentiment, sentiment.n >= 10)
+# calculate number of sentiment words in each tweet
+df.tweet.sentiment <- dplyr::summarize(group_by(df.token, id, DOY),
+                                       sentiment = mean(score, na.rm=T),
+                                       n.sentiment = sum(is.finite(score)))
+df.tweet.sentiment <- subset(df.tweet.sentiment, is.finite(sentiment))
+df.tweet.sentiment.time <- dplyr::summarize(group_by(df.tweet.sentiment, DOY),
+                                            sentiment.mean = mean(sentiment, na.rm=T),
+                                            sentiment.n = sum(is.finite(DOY)))
 
 # for all states, sentiment through time
 df.sentiment.time <- dplyr::summarize(group_by(df.token, DOY),
                                       sentiment.mean = mean(score, na.rm=T),
-                                      sentiment.n = sum(is.finite(score)), na.rm=T)
+                                      sentiment.n = sum(is.finite(score), na.rm=T))
 
-## make map
+## make plot
 # overall sentiment timeseries of mean
+# old version: uses average of all sentiment words for a given DOY
+# p.sentiment.time <-
+#   ggplot(df.sentiment.time, aes(x=DOY, y=sentiment.mean, size=sentiment.n, weight=sentiment.n)) +
+#   geom_hline(yintercept=0, color="gray65") +
+#   geom_point(alpha=0.5) +
+#   stat_smooth(method="loess", show.legend=F) +
+#   scale_y_continuous(limits=c(-max(df.sentiment.time$sentiment.mean, na.rm=T), max(df.sentiment.time$sentiment.mean, na.rm=T))) +
+#   theme_SCZ()
+
+# new version: first averages sentiment words by tweets, then averages mean tweet score by DOY
 p.sentiment.time <-
-  ggplot(df.sentiment.time, aes(x=DOY, y=sentiment.mean, size=sentiment.n, weight=sentiment.n)) +
+  ggplot(df.tweet.sentiment.time, aes(x=DOY, y=sentiment.mean, size=sentiment.n, weight=sentiment.n)) +
   geom_hline(yintercept=0, color="gray65") +
   geom_point(alpha=0.5) +
   stat_smooth(method="loess", show.legend=F) +
-  scale_y_continuous(limits=c(-max(df.sentiment.time$sentiment.mean, na.rm=T), max(df.sentiment.time$sentiment.mean, na.rm=T))) +
+  scale_y_continuous(limits=c(-max(df.tweet.sentiment.time$sentiment.mean, na.rm=T), max(df.tweet.sentiment.time$sentiment.mean, na.rm=T))) +
   theme_SCZ()
 
 pdf(paste0(plot.dir, "Figure_Context_Sentiment_NoText.pdf"), width=(77/25.4), height=(77/25.4))
@@ -137,3 +147,6 @@ p.sentiment.time + theme(text=element_blank(), plot.margin=unit(c(0.5,0.5,0,0), 
                          legend.position=c(0,0), legend.justification=c(0,0), 
                          legend.direction="horizontal", legend.background=element_blank())
 dev.off()
+
+sum(df.tweet.sentiment$n.sentiment)
+table(df.tweet.sentiment$n.sentiment)

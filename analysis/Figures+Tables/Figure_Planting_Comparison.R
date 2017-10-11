@@ -15,11 +15,12 @@ require(dplyr)
 require(ggplot2)
 require(hydroGOF)
 require(gridExtra)
+require(reshape2)
 source(paste0(git.dir, "analysis/plots/plot_colors.R"))
 source(paste0(git.dir, "analysis/interp.R"))
 
 # which fit method to use? "spline" or "logistic"
-fit.method <- "logistic"
+fit.method <- "spline"
 
 # plot directory
 plot.dir <- paste0(git.dir, "analysis/Figures+Tables/")
@@ -34,17 +35,15 @@ df.in <- subset(df.in, method==fit.method)
 df.in$crop.state <- paste0(df.in$crop, ".", df.in$state.abb)
 crop.state.combos <- unique(df.in$crop.state)
 
-## 70/30 cross-validation to select best buffer
+## cross-validation to select best buffer
 df.cal <- df.in
-n.cal <- round(length(crop.state.combos)*0.5)
-n.iter <- 1000
-set.seed(1)
-for (iter in 1:n.iter){
+samples <- t(combn(crop.state.combos, 5))
+for (i in 1:dim(samples)[1]){
   # get data frame
   df.cal$sample <- "cal"
   
   # sample crop.state.combos for cal/val
-  df.cal$sample[df.cal$crop.state %in% base::sample(crop.state.combos, n.cal)] <- "val"
+  df.cal$sample[df.cal$crop.state %in% samples[i,]] <- "val"
   
   # calculate fit
   df.iter.fit <- dplyr::summarize(group_by(df.cal, wk.buffer.start, wk.buffer.end, sample),
@@ -52,7 +51,7 @@ for (iter in 1:n.iter){
                                   MAE = mae(progress.twitter, progress.NASS),
                                   KGE = KGE(progress.twitter, progress.NASS),
                                   bias.prc = pbias(progress.twitter, progress.NASS),
-                                  iteration=iter)
+                                  iteration=i)
   
   if (exists("df.iter.all")){
     df.iter.all <- rbind(df.iter.all, df.iter.fit)
@@ -62,19 +61,30 @@ for (iter in 1:n.iter){
 }
 
 # summarize by cal/val
-df.fit.buffer <- dplyr::summarize(group_by(df.iter.all, wk.buffer.start, wk.buffer.end, sample),
-                           MAE.mean = mean(MAE),
-                           RMSE.mean = mean(RMSE),
-                           KGE.mean = mean(KGE))
+df.fit.buffer.iter <- dplyr::summarize(group_by(df.iter.all, wk.buffer.start, wk.buffer.end, sample, iteration),
+                                       MAE.iter.mean = mean(MAE),
+                                       RMSE.iter.mean = mean(RMSE),
+                                       KGE.iter.mean = mean(KGE))
+
+df.fit.buffer <- dplyr::summarize(group_by(df.fit.buffer.iter, wk.buffer.start, wk.buffer.end, sample),
+                                  MAE.min = min(MAE.iter.mean),
+                                  MAE.mean = mean(MAE.iter.mean),
+                                  MAE.max = max(MAE.iter.mean),
+                                  MAE.sd = sd(MAE.iter.mean),
+                                  RMSE.min = min(RMSE.iter.mean),
+                                  RMSE.mean = mean(RMSE.iter.mean),
+                                  RMSE.max = max(RMSE.iter.mean),
+                                  RMSE.sd = sd(RMSE.iter.mean),
+                                  KGE.min = min(KGE.iter.mean),
+                                  KGE.mean = mean(KGE.iter.mean),
+                                  KGE.max = max(KGE.iter.mean),
+                                  KGE.sd = sd(KGE.iter.mean))
 
 # select best buffers
 df.fit.buffer.cal <- subset(df.fit.buffer, sample=="cal")
 i.best.buffer <- which(df.fit.buffer.cal$MAE.mean==min(df.fit.buffer.cal$MAE.mean))
 wk.buffer.start.best <- df.fit.buffer.cal$wk.buffer.start[i.best.buffer]
 wk.buffer.end.best <- df.fit.buffer.cal$wk.buffer.end[i.best.buffer]
-
-# validation statistics
-df.fit.buffer$MAE.mean[df.fit.buffer$sample=="val" & df.fit.buffer$wk.buffer.start==wk.buffer.start.best & df.fit.buffer$wk.buffer.end==wk.buffer.end.best]
 
 # subset to best
 df.all <- subset(df.in, (wk.buffer.start==wk.buffer.start.best & wk.buffer.end==wk.buffer.end.best))
@@ -111,13 +121,14 @@ p.facet.prc + theme(text=element_blank(), plot.margin=unit(c(0.5,0.5,0,0), "mm")
 dev.off()
 
 p.scatter <-
-  ggplot(df.all, aes(x=progress.NASS, y=progress.twitter, shape=crop, linetype=crop)) +
+  ggplot(df.all, aes(x=progress.NASS, y=progress.twitter)) +
   geom_abline(intercept=0, slope=1, color="gray65") +
-  geom_point(color="black") +
+  geom_point(color="black", aes(shape=crop)) +
+  stat_smooth(method="lm", se=F, color="black") +
   scale_x_continuous(name="% Planted, NASS", limits=c(0,100)) +
   scale_y_continuous(name="% Planted, Twitter", limits=c(0,100)) +
   scale_shape_manual(values=c("corn"=24, "soy"=22), guide=F) +
-  scale_linetype_manual(values=c("corn"="solid", "soy"="dashed"), guide=F) +
+#  scale_linetype_manual(values=c("corn"="solid", "soy"="dashed"), guide=F) +
   theme_SCZ() +
   theme(legend.position="bottom")
 
@@ -125,29 +136,7 @@ pdf(paste0(plot.dir, "Figure_Planting_Comparison_TwitterVsNASS_NoText.pdf"), wid
 p.scatter + theme(text=element_blank(), plot.margin=unit(c(0.5,0.5,0,0), "mm"))
 dev.off()
 
-# scatterplot overall RMSE
-rmse(df.all$progress.twitter, df.all$progress.NASS)
-rmse(subset(df.all, crop=="corn")$progress.twitter, subset(df.all, crop=="corn")$progress.NASS)
-rmse(subset(df.all, crop=="soy")$progress.twitter, subset(df.all, crop=="soy")$progress.NASS)
-
-mae(df.all$progress.twitter, df.all$progress.NASS)
-mae(subset(df.all, crop=="corn")$progress.twitter, subset(df.all, crop=="corn")$progress.NASS)
-mae(subset(df.all, crop=="soy")$progress.twitter, subset(df.all, crop=="soy")$progress.NASS)
-
-## comparison with 0 buffer
-df.all.0 <- subset(df.in, wk.buffer.start==0 & wk.buffer.end==0)
-df.melt.0 <- melt(df.all.0[,c("week", "crop", "state.abb", "crop.state", "progress.twitter", "progress.NASS")],
-                  id=c("week", "crop", "state.abb", "crop.state"))
-
-df.melt.0 <- df.melt.0[is.finite(df.melt.0$value), ]
-
-p.facet.prc.0 <-
-  ggplot(df.melt.0, aes(x=week, y=value, color=variable)) +
-  geom_line() +
-  geom_point() +
-  facet_wrap(~ crop.state, ncol=5) +
-  scale_color_manual(name="Source", labels=c("progress.twitter"="Twitter", "progress.NASS"="NASS"),
-                     values=c("progress.twitter"=col.blue, "progress.NASS"=col.red), guide=F) +
-  scale_x_continuous(name="Week", breaks=seq(15,25,5)) +
-  scale_y_continuous(name="% Planted") +
-  theme_SCZ()
+# validation statistics
+df.fit.buffer$MAE.min[df.fit.buffer$sample=="val" & df.fit.buffer$wk.buffer.start==wk.buffer.start.best & df.fit.buffer$wk.buffer.end==wk.buffer.end.best]
+df.fit.buffer$MAE.mean[df.fit.buffer$sample=="val" & df.fit.buffer$wk.buffer.start==wk.buffer.start.best & df.fit.buffer$wk.buffer.end==wk.buffer.end.best]
+df.fit.buffer$MAE.max[df.fit.buffer$sample=="val" & df.fit.buffer$wk.buffer.start==wk.buffer.start.best & df.fit.buffer$wk.buffer.end==wk.buffer.end.best]

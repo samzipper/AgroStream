@@ -161,9 +161,6 @@ for (b in remove.words){
 # get rid of anything with plant in it
 df.count <- subset(df.count, !str_detect(word, "plant17"))
 
-# wordcloud
-wordcloud(df.count$word, df.count$n, max.words=100, rot.per=0.5)
-
 df.count$word[1:100]
 
 ## stats
@@ -173,3 +170,27 @@ df.count$n[df.count$word=="no-till"]
 unique(df$state.abb[str_detect(df$text, "irrig")])
 length(df$state.abb[str_detect(df$text, "irrig")])
 unique(df$screenName[str_detect(df$text, "irrig")])
+
+##### part 2: replanting plot
+# mentions of replant
+df$replant <- str_detect(str_to_lower(df$text), "replant")
+
+# sum to weekly
+df.week.replant <- dplyr::summarize(group_by(df, week),
+                                    n.replant=sum(replant),
+                                    n.total=sum(is.finite(week)))
+df.week.replant$prc.replant <- 100*df.week.replant$n.replant/df.week.replant$n.total
+
+p.week.replant.prc <-
+  ggplot(df.week.replant, aes(x=week, y=prc.replant)) +
+  geom_line() +
+  scale_x_continuous(expand=c(0,0)) +
+  scale_y_continuous() +
+  theme_SCZ() +
+  theme(legend.position="bottom")
+pdf(paste0(plot.dir, "Figure_Context_Replanting_NoText.pdf"), width=(80/25.4), height=(60/25.4))
+p.week.replant.prc + theme(text=element_blank(), plot.margin=unit(c(0.5, 0.5, 0.5, 0.5), "mm"))
+dev.off()
+
+df.replant <- subset(df, replant)
+write.csv(df.replant, paste0(plot.dir, "Figure_Context_Replanting_Data.csv"), row.names=F)

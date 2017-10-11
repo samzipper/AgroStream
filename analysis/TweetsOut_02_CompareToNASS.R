@@ -214,9 +214,6 @@ for (i in 1:dim(df.state.crop.all)[1]){
   df.w$diff.first[2:dim(df.w)[1]] <- diff(df.w$tweets.cum, differences=1)
   df.w$diff.second[3:dim(df.w)[1]] <- diff(df.w$tweets.cum, differences=2)
   
-  ## kernel smoothing
-  fit.kern <- kdde(df.w$tweets)
-  
   ## spline smoothing
   fit.spline <- smooth.spline(df.w$week, df.w$tweets.cum, spar=0.5)
   df.w$fit.spline <- predict(fit.spline, x=df.w$week)$y

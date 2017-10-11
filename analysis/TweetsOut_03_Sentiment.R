@@ -1,6 +1,6 @@
 ## TweetsOut_03_Sentiment.R
-#' This script is intended to analyze the sentiment of tweets.
-#' It requires output from TweetsOut_01_ClassifyBystate.R
+#' This script is intended to conduct exploratory analysis of the sentiment of tweets
+#' and other contextual information. It requires output from TweetsOut_01_ClassifyBystate.R
 #' 
 #' Good tutorial: http://tidytextmining.com/tidytext.html
 
@@ -155,8 +155,11 @@ df$no.till <- str_detect(df$text, "no till")|str_detect(df$text, "no-till")|str_
 df$replant <- str_detect(str_to_lower(df$text), "replant")
 
 # mentions of rain or wet
-df$rain.wet <- str_detect(str_to_lower(df$text), "rain")|str_detect(str_to_lower(df$text), "wet")
+df$rain.wet <- str_detect(str_to_lower(df$text), "rain")|str_detect(str_to_lower(df$text), "wet")|str_detect(str_to_lower(df$text), "flood")|str_detect(str_to_lower(df$text), "moist")
 df$wet <- str_detect(str_to_lower(df$text), "wet")
+
+# subset to replant tweets only
+df.replant <- subset(df, replant)
 
 # sum by state replant and rain
 df.state.replant <- dplyr::summarize(group_by(df, state.abb),
@@ -179,6 +182,13 @@ df.DOY.replant <- dplyr::summarize(group_by(df, DOY),
 df.DOY.replant$rain.tweets <- df.DOY.replant$n.rain/df.DOY.replant$n.tweets
 df.DOY.replant$replant.tweets <- df.DOY.replant$n.replant/df.DOY.replant$n.tweets
 
+df.week.replant <- dplyr::summarize(group_by(df, week),
+                                   n.tweets = sum(is.finite(DOY)),
+                                   n.rain = sum(rain.wet),
+                                   n.replant = sum(replant))
+df.week.replant$rain.tweets <- df.week.replant$n.rain/df.week.replant$n.tweets
+df.week.replant$replant.tweets <- df.week.replant$n.replant/df.week.replant$n.tweets
+
 # daily mentions of replant and total negative words
 df.token$replant <- str_detect(df.token$word, "replant")
 df.replant.sentiment <- dplyr::summarize(group_by(df.token, DOY),
@@ -191,9 +201,11 @@ df.replant.sentiment <- dplyr::summarize(group_by(df.token, DOY),
 # prepare polygon for ggplot
 df.state.sentiment$region <- str_to_lower(df.state.sentiment$state)
 df.state.wet.dry$region <- str_to_lower(df.state.wet.dry$state)
+df.state.replant$region <- str_to_lower(abb2state(df.state.replant$state.abb))
 data.maps <- map_data("state")
 df.map <- left_join(data.maps, df.state.sentiment, by="region")
 df.map <- left_join(df.map, df.state.wet.dry[,c("wet.dry", "region")], by="region")
+df.map <- left_join(df.map, df.state.replant[,c("replant", "region")], by="region")
 df.map <- df.map[order(df.map$order),]
 
 # map of mean sentiment
@@ -227,6 +239,19 @@ p.time.wet.dry <-
   ggplot(subset(df.DOY.wet.dry.melt, value!=0), aes(x=DOY, y=value, color=variable)) +
   geom_point() +
   stat_smooth(method="loess") +
+  theme_bw() +
+  theme(panel.grid=element_blank(),
+        panel.border=element_blank(),
+        legend.position="bottom")
+
+# map of replant
+p.map.replant <-
+  ggplot(df.map, aes(x=long, y=lat, group=group, fill=replant)) +
+  geom_polygon() +
+  scale_fill_gradient(name="replant") +
+  scale_x_continuous(name="Longitude", expand=c(0,0)) +
+  scale_y_continuous(name="Latitude", expand=c(0,0)) +
+  coord_map() +
   theme_bw() +
   theme(panel.grid=element_blank(),
         panel.border=element_blank(),
@@ -268,6 +293,14 @@ p.DOY.replant.norm <-
 
 p.DOY.replant <-
   ggplot(melt(df.DOY.replant, id=c("DOY", "n.tweets", "rain.tweets", "replant.tweets")), aes(x=DOY, y=value, color=variable)) +
+  geom_line()
+
+p.week.replant.norm <- 
+  ggplot(melt(df.week.replant, id=c("week", "n.tweets", "n.rain", "n.replant")), aes(x=week, y=value, color=variable)) +
+  geom_line()
+
+p.week.replant <-
+  ggplot(melt(df.week.replant, id=c("week", "n.tweets", "rain.tweets", "replant.tweets")), aes(x=week, y=value, color=variable)) +
   geom_line()
 
 # replant with sentiment
