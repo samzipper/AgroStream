@@ -47,6 +47,12 @@ df.d <- summarize(group_by(df, Date),
 # print most recent tweet
 print(paste0("Last tweet: ", df$created[which.max(df$id)]))
 
+# list of missing days
+missing <- seq(df.d$Date[1], Sys.Date(), by="day")[!(seq(df.d$Date[1], Sys.Date(), by="day") %in% df.d$Date)]
+print(missing)
+print(yday(missing))
+print(week(missing))
+
 p.bar.tweets.DOY <-
   ggplot(df.d, aes(x=Date, y=tweets)) +
   geom_bar(stat="identity") +
