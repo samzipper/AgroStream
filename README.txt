@@ -19,3 +19,4 @@ A manuscript has been submitted to Agronomy Journal in summer/fall of 2017:
 -After 8/15/2017 (did retrospective search for 8/8/2017-8/14/2017): 
     search.str.1 <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018))"
     search.str.2 <- "#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 OR #corn2019 OR #soy17 OR #soy2017 OR #soy18 OR #soy2018 OR #soy19 OR #soy2019 OR #wheat17 OR #wheat2017 OR #wheat18 OR #wheat2018 OR #wheat19 OR #wheat2019"
+-Issues with geocode for Sept-Oct 2017; fixed on 11/6/2017 and did retrospective search for 10/30/2017-11/5/2017 (1 week)
