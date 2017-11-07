@@ -33,7 +33,7 @@ out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
 path.out <- paste0(out.dir, "rTweetsOut.sqlite")
 
 # path to save the screen output
-path.sink <- paste0(out.dir, "TweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
+path.sink <- paste0(out.dir, "rTweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
 
 ## launch sink file, which will store screen output 
 # this is useful when automating, so it can be double-checked later
@@ -110,6 +110,9 @@ df.users <- df.users[!(df.users$location %in% big.geo), ]
 # get unique locations
 locations <- unique(df.users$location)
 
+# status update
+print(paste0(length(locations), " locations to geocode"))
+
 # call geocode
 geo.out <- geocode(locations, source="google", output="all")
 
@@ -165,6 +168,9 @@ df.locations <- data.frame(
   lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
   lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
 )
+
+# status update
+print(paste0(length(locations), " locations successfully geocoded"))
 
 # add location info back to user data frame
 df.users <- left_join(df.users[c("location", "description", "screen_name")], df.locations, by="location", all.x=T)
