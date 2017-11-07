@@ -110,6 +110,9 @@ df.users <- df.users[!(df.users$location %in% big.geo), ]
 # get unique locations
 locations <- unique(df.users$location)
 
+# status update
+print(paste0(length(locations), " locations to geocode"))
+
 # call geocode
 geo.out <- geocode(locations, source="google", output="all")
 
@@ -165,6 +168,9 @@ df.locations <- data.frame(
   lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
   lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
 )
+
+# status update
+print(paste0(length(locations), " locations successfully geocoded"))
 
 # add location info back to user data frame
 df.users <- left_join(df.users[c("location", "description", "screen_name")], df.locations, by="location", all.x=T)
