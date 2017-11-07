@@ -11,13 +11,14 @@ rm(list=ls())
 git.dir <- "C:/Users/Sam/WorkGits/AgroStream/"
 
 # load packages
-require(twitteR)
+require(rtweet)
 require(lubridate)
 require(ggmap)
 require(stringr)
 require(maptools)
 require(DBI)
 require(ROAuth)
+require(dplyr)
 
 # search string: what will you search twitter for?
 search.str.1 <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018))"
@@ -29,7 +30,7 @@ out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
 #out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to save output data
-path.out <- paste0(out.dir, "TweetsOut.sqlite")
+path.out <- paste0(out.dir, "rTweetsOut.sqlite")
 
 # path to save the screen output
 path.sink <- paste0(out.dir, "TweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
@@ -44,68 +45,32 @@ sink(s, type="message")
 # (downloaded from: http://blog.plsoucy.com/2012/04/iso-3166-country-code-list-csv-sql/ )
 path.countries <- paste0(git.dir, "AllCountries.csv")
 
-# relative path to authentication info (this is in .gitignore
-# so not shared publicly). these are obtained from twitter/google
-# when you create your app.
-path.auth.t <- paste0(out.dir, "TwitterAuth.txt")
-
-# read in authentication info - file has three lines of 
-# comments followed by:
-#   [1] consumer key (API key)
-#   [2] consumer secret (API secret)
-#   [3] access token
-#   [4] access secret
-auth.t <- read.table(path.auth.t, skip=3, stringsAsFactors=F)[,1]    # read in as vector
-
-# set up authentication
-options(httr_oauth_cache=T)   # this will store authentication as a local file
-setup_twitter_oauth(auth.t[1], auth.t[2], auth.t[3], auth.t[4])
-
 # get today/yesterday dates
 date_today <- as.Date(Sys.time())
 date_yesterday <- date_today-days(1)
 
 # search twitter!
-tweets.1 <- searchTwitter(search.str.1, 
-                          n=10000, 
-                          geocode='39.833333,-98.583333,1500mi',
-                          resultType="recent",
-                          since=as.character(date_yesterday),
-                          until=as.character(date_today),
-                          retryOnRateLimit=5000)
+tweets <- search_tweets2(c(search.str.1, search.str.2),
+                         n=10000, 
+                         geocode='39.833333,-98.583333,1500mi',
+                         type="recent",
+                         include_rts=F,
+                         #max_id=max(as.numeric(tweets.old$id))-1,
+                         # since=as.character(date_yesterday),
+                         #  until=as.character(date_today),
+                         retryOnRateLimit=T)
 
-tweets.2 <- searchTwitter(search.str.2, 
-                          n=10000, 
-                          geocode='39.833333,-98.583333,1500mi',
-                          resultType="recent",
-                          since=as.character(date_yesterday),
-                          until=as.character(date_today),
-                          retryOnRateLimit=5000)
-
-tweets <- append(tweets.1, tweets.2)
-
-# get rid of retweets
-tweets <- strip_retweets(tweets, strip_manual=T, strip_mt=T)
-
-# put into data frame (only categories we care about)
-df <- twListToDF(tweets)[,c("text", "created", "id", "screenName", "isRetweet", "longitude", "latitude")]
+# subset to yesterday only
+df <- subset(tweets, created_at >= date_yesterday & created_at < date_today)
 
 # get rid of duplicates just in case
 df <- unique(df)
-
-# convert text to UTF-8 to deal with weird characters
-df$text <- sapply(df$text, function(row) iconv(row, to='UTF-8'))
-df$text <- gsub("\n", " ", df$text)
-
-# get rid of tweets referring to The Tribez (an android game where people plant things)
-df <- subset(df, !grepl(tolower("The Tribez"), tolower(df$text)))
 
 ## using Google Maps API, get estimated geographic coordinates based on user location
 # limit of 2500/day! so, get clean location as much as possible first to minimize calls to API
 
 # get user location
-userInfo <- lookupUsers(df$screenName)
-df.users <- twListToDF(userInfo)
+df.users <- lookup_users(df$screen_name)
 
 # trim to only users with location info
 df.users <- df.users[df.users$location != "",]
@@ -202,43 +167,27 @@ df.locations <- data.frame(
 )
 
 # add location info back to user data frame
-df.users <- merge(df.users[c("location", "description", "screenName")], df.locations, by="location", all.x=T)
+df.users <- left_join(df.users[c("location", "description", "screen_name")], df.locations, by="location", all.x=T)
 
 # make output data frame including tweet, user, location, etc.
-df.out <- merge(df, df.users, by="screenName", all.x=T)
-
-# trim output data frame to only those with locations (either geotagged or from google)
-df.out <- df.out[(is.finite(df.out$latitude) & is.finite(df.out$longitude)) | 
-                   (is.finite(df.out$lat.location) & is.finite(df.out$lon.location)), ]
-
-# get rid of commas
-df.out$text <- gsub(",", " ", df.out$text)
-df.out$location <- gsub(",", " ", df.out$location)
-df.out$description <- gsub(",", " ", df.out$description)
-
-# get rid of line breaks
-df.out$text <- gsub("\n", " ", df.out$text)
-df.out$location <- gsub("\n", " ", df.out$location)
-df.out$description <- gsub("\n", " ", df.out$description)
-
-# get rid of URLs
-removeURL <- function(x) gsub("http[[:alnum:][:punct:]]*", "", x)
-df.out$text <- unlist(lapply(df.out$text, removeURL))
-
-# trim leading/trailing white space
-df.out$text <- trimws(df.out$text)
-
-# get rid of duplicate tweets
-df.out <- df.out[!duplicated(df.out[c("screenName", "text")]), ]
+df.out <- left_join(df, df.users, by="screen_name", all.x=T)
 
 # put in order
-df.out <- df.out[order(df.out$id), ]
+df.out <- df.out[order(df.out$status_id), ]
 
 # convert dates to character string for database
-df.out$created <- as.character(df.out$created)
+df.out$created_at <- as.character(df.out$created_at)
+
+## convert columns that are lists to text strings separated by _<>_
+# find list columns
+cols.list <- which(lapply(df.out, class) == "list")
+
+for (col in cols.list){
+  df.out[,col] <- apply(df.out[,col], 1, function(x) as.character(paste(x, collapse="_<>_")))
+}
 
 ## put into database
-# create/connect to database
+# load existing tweet SQLite database
 db <- dbConnect(RSQLite::SQLite(), path.out)
 
 # add data frame to database (if it doesn't exist, it will be created)
@@ -246,6 +195,7 @@ dbWriteTable(db, "tweets", df.out, append=T)
 
 # if you want to read in a data frame from your db to check...
 #df.test <- dbReadTable(db, "tweets")
+#dbWriteTable(db, "tweets", df.test, overwrite=T)
 
 # when you're done, disconnect from database (this is when the data will be written)
 dbDisconnect(db)

@@ -8,7 +8,7 @@ rm(list=ls())
 git.dir <- "C:/Users/Sam/WorkGits/AgroStream/"
 
 # load packages
-require(twitteR)
+require(rtweet)
 require(lubridate)
 require(ggmap)
 require(stringr)
@@ -22,7 +22,7 @@ out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
 #out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to database
-path.out <- paste0(out.dir, "TweetsOut.sqlite")
+path.out <- paste0(out.dir, "rTweetsOut.sqlite")
 
 # connect to database
 db <- dbConnect(RSQLite::SQLite(), path.out)
@@ -38,14 +38,14 @@ dbWriteTable(db, "tweets", df, overwrite=T)
 dbDisconnect(db)
 
 # plot of tweets by day
-df$created <- ymd_hms(df$created)
-df$DOY <- yday(df$created)
-df$Date <- as.Date(df$created)
+df$created_at <- ymd_hms(df$created_at)
+df$DOY <- yday(df$created_at)
+df$Date <- as.Date(df$created_at)
 df.d <- summarize(group_by(df, Date),
                   tweets = sum(is.finite(lat.location)))
 
 # print most recent tweet
-print(paste0("Last tweet: ", df$created[which.max(df$id)]))
+print(paste0("Last tweet: ", df$created_at[which.max(df$status_id)]))
 
 # list of missing days
 missing <- seq(df.d$Date[1], Sys.Date(), by="day")[!(seq(df.d$Date[1], Sys.Date(), by="day") %in% df.d$Date)]
