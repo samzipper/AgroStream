@@ -20,9 +20,13 @@ require(DBI)
 require(ROAuth)
 require(dplyr)
 
+# start/end dates
+date_start <- as.Date(ymd("2017-10-23"))  # this date is included
+date_end <- as.Date(ymd("2017-10-30"))    # this date is not included
+
 # search string: what will you search twitter for?
-search.str.1 <- "((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018))"
-search.str.2 <- "#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 OR #corn2019 OR #soy17 OR #soy2017 OR #soy18 OR #soy2018 OR #soy19 OR #soy2019 OR #wheat17 OR #wheat2017 OR #wheat18 OR #wheat2018 OR #wheat19 OR #wheat2019"
+search.str.1 <- paste0("((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018) since:", as.character(date_start), " until:", as.character(date_end))
+search.str.2 <- paste0("#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 OR #corn2019 OR #soy17 OR #soy2017 OR #soy18 OR #soy2018 OR #soy19 OR #soy2019 OR #wheat17 OR #wheat2017 OR #wheat18 OR #wheat2018 OR #wheat19 OR #wheat2019  since:", as.character(date_start), " until:", as.character(date_end))
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
@@ -45,19 +49,12 @@ sink(s, type="message")
 # (downloaded from: http://blog.plsoucy.com/2012/04/iso-3166-country-code-list-csv-sql/ )
 path.countries <- paste0(git.dir, "AllCountries.csv")
 
-# get start/end dates
-date_start <- as.Date(ymd("2017-10-23"))  # this date is included
-date_end <- as.Date(ymd("2017-10-30"))    # this date is not included
-
 # search twitter!
 tweets <- search_tweets2(c(search.str.1, search.str.2),
                          n=10000, 
                          geocode='39.833333,-98.583333,1500mi',
                          type="recent",
                          include_rts=F,
-                         #max_id=max(as.numeric(tweets.old$id))-1,
-                         # since=as.character(date_yesterday),
-                         #  until=as.character(date_today),
                          retryOnRateLimit=T)
 
 # subset to yesterday only
