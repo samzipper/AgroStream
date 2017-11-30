@@ -79,6 +79,9 @@ df.users <- df.users[df.users$location != "",]
 df.users$location <- gsub("%", " ",df.users$location)
 df.users$location <- gsub("#", " ",df.users$location)
 
+# deal with emojis and other weird characters
+df.users$location <- iconv(df.users$location, "UTF-8", "ASCII", sub="")
+
 # trim leading/trailing white space
 df.users$location <- trimws(df.users$location)
 
