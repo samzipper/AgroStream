@@ -4,14 +4,18 @@ the Twitter Streaming API that match keywords related to
 planting of corn/soy/wheat. The goal is to track planting 
 date and compare to USDA NASS crop progress reports.
 
+A manuscript describing AgroStream has been published in 
+Agronomy Journal, January 2018 issue (open access):
+    Zipper, SC (2018). Agricultural research using social
+    media data. Agronomy Journal 110(1):349-358.
+    https://dl.sciencesocieties.org/publications/aj/abstracts/110/1/349
+Please cite this manuscript in any studies using AgroStream or derivatives.
+
 The primary work is done by the script, SearchAndStoreTweets.R.
 Windows Task Scheduler is used to run this script daily, as described here:
 http://stackoverflow.com/questions/2793389/scheduling-r-script
 and here (to have task run in background):
 http://stackoverflow.com/questions/6568736/how-do-i-set-a-windows-scheduled-task-to-run-in-the-background
-
-A manuscript has been submitted to Agronomy Journal in summer/fall of 2017:
--Initial submission corresponds to commit 3f41f56 
 
 ***History of search strings:***
 -Prior to 8/15/2017: 
