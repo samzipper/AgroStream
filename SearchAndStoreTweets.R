@@ -113,6 +113,9 @@ df.users <- df.users[!(df.users$location %in% big.geo), ]
 # get unique locations
 locations <- unique(df.users$location)
 
+# get rid of any locations that are empty
+locations <- locations[!(locations %in% c(" ", ""))]
+
 # status update
 print(paste0(length(locations), " locations to geocode"))
 
