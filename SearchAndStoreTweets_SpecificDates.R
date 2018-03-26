@@ -45,6 +45,10 @@ path.sink <- paste0(out.dir, "rTweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H
 s <- file(path.sink, open="wt")
 sink(s, type="message")
 
+# load existing tweet SQLite database
+db <- dbConnect(RSQLite::SQLite(), path.out)
+df.in <- dbReadTable(db, "tweets")
+
 # path to a CSV file with a list of all countries 
 # (downloaded from: http://blog.plsoucy.com/2012/04/iso-3166-country-code-list-csv-sql/ )
 path.countries <- paste0(git.dir, "AllCountries.csv")
@@ -113,6 +117,14 @@ locations <- unique(df.users$location)
 # get rid of any locations that are empty
 locations <- locations[!(locations %in% c(" ", ""))]
 
+# figure out which locations have already been geocoded
+locations.exist <- locations[str_to_lower(locations) %in% str_to_lower(df.in$location)]
+df.locations.exist <- 
+  data.frame(location = locations.exist,
+             lat.location = df.in$lat.location[match(str_to_lower(locations.exist), str_to_lower(df.in$location))],
+             lon.location = df.in$lon.location[match(str_to_lower(locations.exist), str_to_lower(df.in$location))])
+locations <- locations[!(locations %in% locations.exist)]
+
 # status update
 print(paste0(length(locations), " locations to geocode"))
 
@@ -166,11 +178,12 @@ geo.out <- geo.out[check.state]
 locations <- locations[check.state]
 
 ## make final locations data frame
-df.locations <- data.frame(
-  location = locations,
-  lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
-  lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
-)
+df.locations <- rbind(df.locations.exist,
+                      data.frame(
+                        location = locations,
+                        lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
+                        lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
+                      ))
 
 # status update
 print(paste0(length(locations), " locations successfully geocoded"))
@@ -196,9 +209,6 @@ for (col in cols.list){
 }
 
 ## put into database
-# load existing tweet SQLite database
-db <- dbConnect(RSQLite::SQLite(), path.out)
-
 # add data frame to database (if it doesn't exist, it will be created)
 dbWriteTable(db, "tweets", df.out, append=T)
 
