@@ -56,6 +56,7 @@ print(paste0("Last tweet: ", df$created_at[which.max(df$status_id)]))
 p.bar.tweets.DOY <-
   ggplot(df.d, aes(x=Date, y=tweets)) +
   geom_bar(stat="identity") +
+  labs(title=paste0(sum(df.d$tweets), " tweets")) +
   theme_bw() +
   theme(panel.grid=element_blank())
 p.bar.tweets.DOY
