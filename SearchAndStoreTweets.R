@@ -137,11 +137,12 @@ lon.location <- rep(NaN, length(locations))
 success <- rep(F, length(locations))
 
 # call geocode for each location
-maxtries <- 25
+maxtries <- 5
 for (l in 1:length(locations)){
+  check.geocode <- F
   check.status <- F
   tries <- 0
-  while (!check.status & tries <= maxtries){
+  while (!check.geocode & tries <= maxtries){
     # count number of tries
     tries <- tries + 1
     
@@ -149,6 +150,7 @@ for (l in 1:length(locations)){
     l.geo <- ggmap::geocode(locations[l], source="google", output="all")
     
     # check if success
+    if (l.geo$status != "OVER_QUERY_LIMIT") check.geocode <- T
     if (l.geo$status == "OK") check.status <- T
   }
   

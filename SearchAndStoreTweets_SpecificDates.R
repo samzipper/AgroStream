@@ -93,7 +93,7 @@ df.countries <- subset(df.countries, code != "US")   # get rid of US from list
 
 # add some more countries/other things to filter
 countries <- c(df.countries$name, 
-               "Netherlands", "México", "Guam", 
+               "Netherlands", "M?xico", "Guam", 
                "Alberta", "Saskatchewan", "British Columbia", "Yukon Territories", "Ontario", "Quebec",
                "Nunavut", "Northwest Territories", "Yukon Territory", "Prince Edward Island", "Newfoundland",
                "Alaska", "Hawaii", "Africa", "Asia", "Europe", "Australia")
@@ -128,65 +128,65 @@ locations <- locations[!(locations %in% locations.exist)]
 # status update
 print(paste0(length(locations), " locations to geocode"))
 
-# call geocode
-geo.out <- geocode(locations, source="google", output="all")
+# make vector to hold empty locations
+lat.location <- rep(NaN, length(locations))
+lon.location <- rep(NaN, length(locations))
+success <- rep(F, length(locations))
 
-## filter output
-# status check: did geocode find a location?
-check.status <- sapply(geo.out, function(x) x["status"]=="OK" & length(x["status"])>0)
-check.status[is.na(check.status)] <- F
-geo.out <- geo.out[check.status]
-locations <- locations[check.status]
-
-# status check: is location ambiguous?
-check.ambig <- sapply(lapply(geo.out, lapply, length), function(x) x["results"]=="1")
-geo.out <- geo.out[check.ambig]
-locations <- locations[check.ambig]
-
-# status check: is location resolved to state level?
-# acceptable google address component codes, from https://developers.google.com/maps/documentation/geocoding/intro
-add.comp.state <- c("locality", "postal_code", "neighborhood", "park", "sublocality", "locality",
-                    paste0("administrative_area_level_", seq(1,5)))
-
-state.resolved <- function(i.location, geocodes=geo.out){
-  # custom function to determine if any subcounty address component exists
-  #   input, i.location, is the index of a point in the geo.out list
-  #   output will be a logical (T/F)
+# call geocode for each location
+maxtries <- 5
+for (l in 1:length(locations)){
+  check.geocode <- F
+  check.status <- F
+  tries <- 0
+  while (!check.geocode & tries <= maxtries){
+    # count number of tries
+    tries <- tries + 1
+    
+    # geocode
+    l.geo <- ggmap::geocode(locations[l], source="google", output="all")
+    
+    # check if success
+    if (l.geo$status != "OVER_QUERY_LIMIT") check.geocode <- T
+    if (l.geo$status == "OK") check.status <- T
+  }
   
-  # check if it found any results
-  if (length(geocodes[[i.location]]$results)>0){
+  if (check.status){
+    # check if location not ambiguous
+    check.ambig <- if (length(l.geo$results)==1) T else F
     
-    # figure out number of address components returned for this location
-    n.add.comp <- length(geocodes[[i.location]]["results"]$results[[1]]$address_components)
+    # check if location resolved to state level
+    #   acceptable google address component codes, from https://developers.google.com/maps/documentation/geocoding/intro
+    add.comp.state <- c("locality", "postal_code", "neighborhood", "park", "sublocality", "locality",
+                        paste0("administrative_area_level_", seq(1,5)))
+    add.comps <- unlist(l.geo$results[[1]]$address_components)
+    if (sum(add.comps[which(names(add.comps)=="types1")] %in% add.comp.state) > 0){
+      check.state <- T
+    } else {
+      check.state <- F
+    }
     
-    # extract address component types for this location
-    add.comp.types <- unlist(sapply(1:n.add.comp, function(x) unlist(geocodes[[i.location]]["results"]$results[[1]]$address_components[[x]]$types)))
-    
-    # see if any address component types are at subcounty level
-    return(sum(add.comp.types %in% add.comp.state)>0)
-    
-  } else {
-    # if no results found, output is false
-    
-    return(FALSE)
+    # figure out: is this a good geocode?
+    if (check.status & check.ambig & check.state){
+      success[l] <- T
+      lat.location[l] <- l.geo$results[[1]]$geometry$location$lat
+      lon.location[l] <- l.geo$results[[1]]$geometry$location$lng
+    }
     
   }
-} 
-
-check.state <- unlist(lapply(1:length(locations), FUN=state.resolved))   # apply state check function
-geo.out <- geo.out[check.state]
-locations <- locations[check.state]
+  
+}
 
 ## make final locations data frame
 df.locations <- rbind(df.locations.exist,
                       data.frame(
-                        location = locations,
-                        lat.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lat),
-                        lon.location = sapply(geo.out, function(x) x["results"]$results[[1]]$geometry$location$lng)
+                        location = locations[success],
+                        lat.location = lat.location[success],
+                        lon.location = lon.location[success]
                       ))
 
 # status update
-print(paste0(length(locations), " locations successfully geocoded"))
+print(paste0(sum(success), " locations successfully geocoded"))
 
 # add location info back to user data frame
 df.users <- left_join(df.users[c("location", "description", "screen_name")], df.locations, by="location", all.x=T)
