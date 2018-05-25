@@ -42,7 +42,7 @@ df$created_at <- ymd_hms(df$created_at)
 df$DOY <- yday(df$created_at)
 df$Date <- as.Date(df$created_at)
 df.d <- summarize(group_by(df, Date),
-                  tweets = sum(is.finite(lat.location)))
+                  tweets = sum(is.finite(created_at)))
 
 # list of missing days
 missing <- seq(df.d$Date[1], Sys.Date()-1, by="day")[!(seq(df.d$Date[1], Sys.Date()-1, by="day") %in% df.d$Date)]
