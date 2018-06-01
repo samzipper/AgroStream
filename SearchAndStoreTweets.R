@@ -39,6 +39,9 @@ path.out <- paste0(out.dir, "rTweetsOut.sqlite")
 # path to save the screen output
 path.sink <- paste0(out.dir, "rTweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
 
+# read in token which was created with script rtweet_SetUpToken.R
+r.token <- readRDS(file.path(out.dir, "twitter_token.Rds"))
+
 ## launch sink file, which will store screen output 
 # this is useful when automating, so it can be double-checked later
 # to make sure nothing weird happened
@@ -62,7 +65,8 @@ tweets <- search_tweets2(c(search.str.1, search.str.2),
                          geocode='39.833333,-98.583333,1500mi',
                          type="recent",
                          include_rts=F,
-                         retryOnRateLimit=T)
+                         retryOnRateLimit=T,
+                         token=r.token)
 
 # subset to yesterday only, just in case...
 df <- subset(tweets, created_at >= date_yesterday & created_at < date_today)
@@ -74,7 +78,8 @@ df <- unique(df)
 # limit of 2500/day! so, get clean location as much as possible first to minimize calls to API
 
 # get user location
-df.users <- lookup_users(df$screen_name)
+df.users <- lookup_users(df$screen_name,
+                         token=r.token)
 
 # trim to only users with location info
 df.users <- df.users[df.users$location != "",]
@@ -82,6 +87,8 @@ df.users <- df.users[df.users$location != "",]
 # replace % and # in user location with blank so geocode doesn't get messed up
 df.users$location <- gsub("%", " ",df.users$location)
 df.users$location <- gsub("#", " ",df.users$location)
+df.users$location <- gsub("$", " ",df.users$location)
+df.users$location <- gsub("^&", " ",df.users$location)
 
 # deal with emojis and other weird characters
 df.users$location <- iconv(df.users$location, "UTF-8", "ASCII", sub="")
@@ -96,7 +103,7 @@ df.countries <- subset(df.countries, code != "US")   # get rid of US from list
 
 # add some more countries/other things to filter
 countries <- c(df.countries$name, 
-               "Netherlands", "México", "Guam", 
+               "Netherlands", "M?xico", "Guam", 
                "Alberta", "Saskatchewan", "British Columbia", "Yukon Territories", "Ontario", "Quebec",
                "Nunavut", "Northwest Territories", "Yukon Territory", "Prince Edward Island", "Newfoundland",
                "Alaska", "Hawaii", "Africa", "Asia", "Europe", "Australia")

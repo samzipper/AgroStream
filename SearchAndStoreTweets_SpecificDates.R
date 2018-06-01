@@ -21,8 +21,8 @@ require(ROAuth)
 require(dplyr)
 
 # start/end dates
-date_start <- as.Date(ymd("2017-11-25"))  # this date is included
-date_end <- as.Date(ymd("2017-11-26"))    # this date is not included
+date_start <- as.Date(ymd("2018-05-30"))  # this date is included
+date_end <- as.Date(ymd("2018-05-31"))    # this date is not included
 
 # search string: what will you search twitter for?
 search.str.1 <- paste0("((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018) since:", as.character(date_start), " until:", as.character(date_end))
@@ -38,6 +38,9 @@ path.out <- paste0(out.dir, "rTweetsOut.sqlite")
 
 # path to save the screen output
 path.sink <- paste0(out.dir, "rTweetsOut_Screen_", format(Sys.time(), "%Y%m%d-%H%M"), ".txt")
+
+# read in token which was created with script rtweet_SetUpToken.R
+r.token <- readRDS(file.path(out.dir, "twitter_token.Rds"))
 
 ## launch sink file, which will store screen output 
 # this is useful when automating, so it can be double-checked later
@@ -59,7 +62,8 @@ tweets <- search_tweets2(c(search.str.1, search.str.2),
                          geocode='39.833333,-98.583333,1500mi',
                          type="recent",
                          include_rts=F,
-                         retryOnRateLimit=T)
+                         retryOnRateLimit=T,
+                         token=r.token)
 
 # subset to yesterday only
 df <- subset(tweets, created_at >= date_start & created_at < date_end)
@@ -71,7 +75,8 @@ df <- unique(df)
 # limit of 2500/day! so, get clean location as much as possible first to minimize calls to API
 
 # get user location
-df.users <- lookup_users(df$screen_name)
+df.users <- lookup_users(df$screen_name,
+                         token=r.token)
 
 # trim to only users with location info
 df.users <- df.users[df.users$location != "",]
@@ -79,6 +84,8 @@ df.users <- df.users[df.users$location != "",]
 # replace % and # in user location with blank so geocode doesn't get messed up
 df.users$location <- gsub("%", " ",df.users$location)
 df.users$location <- gsub("#", " ",df.users$location)
+df.users$location <- gsub("$", " ",df.users$location)
+df.users$location <- gsub("^&", " ",df.users$location)
 
 # deal with emojis and other weird characters
 df.users$location <- iconv(df.users$location, "UTF-8", "ASCII", sub="")
