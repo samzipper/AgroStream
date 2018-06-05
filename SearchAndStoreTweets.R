@@ -133,7 +133,8 @@ df.locations.exist <-
   data.frame(location = locations.exist,
              lat.location = df.in$lat.location[match(str_to_lower(locations.exist), str_to_lower(df.in$location))],
              lon.location = df.in$lon.location[match(str_to_lower(locations.exist), str_to_lower(df.in$location))])
-locations <- locations[!(locations %in% locations.exist)]
+df.locations.exist <- subset(df.locations.exist, is.finite(lat.location))
+locations <- locations[!(locations %in% df.locations.exist$location)]
 
 # status update
 print(paste0(length(locations), " locations to geocode"))

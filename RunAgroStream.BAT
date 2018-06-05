@@ -1,1 +1,1 @@
-"C:\Program Files\R\R-3.4.2\bin\x64\Rscript.exe" SearchAndStoreTweets.R
+"C:\Program Files\R\R-3.5.0\bin\x64\Rscript.exe" SearchAndStoreTweets.R
