@@ -21,8 +21,8 @@ require(ROAuth)
 require(dplyr)
 
 # start/end dates
-date_start <- as.Date(ymd("2018-05-30"))  # this date is included
-date_end <- as.Date(ymd("2018-05-31"))    # this date is not included
+date_start <- as.Date(ymd("2018-08-08"))  # this date is included
+date_end <- as.Date(ymd("2018-08-09"))    # this date is not included
 
 # search string: what will you search twitter for?
 search.str.1 <- paste0("((corn OR soy OR wheat) AND (plant OR planting OR planted OR plants OR #plant17 OR #plant2017 OR #plant18 OR #plant2018 OR harvest OR harvesting OR harvested OR harvests OR #harvest17 OR #harvest2017 OR #harvest18 OR #harvest2018) since:", as.character(date_start), " until:", as.character(date_end))
@@ -30,7 +30,8 @@ search.str.2 <- paste0("#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
-out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+out.dir <- "C:/Users/gsas/OneDrive - The University of Kansas/Research/Twitter/AgroStream/"
+#out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
 #out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to save output data
@@ -65,7 +66,7 @@ tweets <- search_tweets2(c(search.str.1, search.str.2),
                          retryOnRateLimit=T,
                          token=r.token)
 
-# subset to yesterday only
+# subset to dates of interest
 df <- subset(tweets, created_at >= date_start & created_at < date_end)
 
 # get rid of duplicates just in case
@@ -85,7 +86,7 @@ df.users <- df.users[df.users$location != "",]
 df.users$location <- gsub("%", " ",df.users$location)
 df.users$location <- gsub("#", " ",df.users$location)
 df.users$location <- gsub("$", " ",df.users$location)
-df.users$location <- gsub("^&", " ",df.users$location)
+df.users$location <- gsub("&", "and",df.users$location)
 
 # deal with emojis and other weird characters
 df.users$location <- iconv(df.users$location, "UTF-8", "ASCII", sub="")

@@ -18,7 +18,8 @@ require(ROAuth)
 require(dplyr)
 
 # output directory: this is where the SQLite database is
-out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+out.dir <- "C:/Users/gsas/OneDrive - The University of Kansas/Research/Twitter/AgroStream/"
+#out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
 #out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to database

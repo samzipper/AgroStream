@@ -30,7 +30,8 @@ search.str.2 <- paste0("#corn17 OR #corn2017 OR #corn18 OR #corn2018 OR #corn19 
 
 # output directory: save to Dropbox, not git repository, so it's automatically backed up
 # this is also where authentication info is stored
-out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
+out.dir <- "C:/Users/gsas/OneDrive - The University of Kansas/Research/Twitter/AgroStream/"
+#out.dir <- "C:/Users/Sam/Dropbox/Work/Twitter/AgroStream/"
 #out.dir <- "D:/Dropbox/Work/Twitter/AgroStream/"
 
 # path to save output data
@@ -88,7 +89,7 @@ df.users <- df.users[df.users$location != "",]
 df.users$location <- gsub("%", " ",df.users$location)
 df.users$location <- gsub("#", " ",df.users$location)
 df.users$location <- gsub("$", " ",df.users$location)
-df.users$location <- gsub("^&", " ",df.users$location)
+df.users$location <- gsub("&", "and",df.users$location)
 
 # deal with emojis and other weird characters
 df.users$location <- iconv(df.users$location, "UTF-8", "ASCII", sub="")
